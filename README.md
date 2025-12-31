@@ -1,5 +1,7 @@
 # CFnew - 终端 v2.8
-
+#在joey的基础上进行美化
+**登陆界面刷新换图片**
+**后台现代化**
 <div align="center" style="margin-bottom: 20px;">
 
 **语言 / زبان:** [🇨🇳 中文](README.md) | [🇮🇷 فارسی](فارسی.md)
