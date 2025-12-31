@@ -760,362 +760,146 @@
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>${t.title}</title>
         <style>
-            * { margin: 0; padding: 0; box-sizing: border-box; }
-            body {
-                font-family: "Courier New", monospace;
-                background: #000; color: #00ff00; min-height: 100vh;
-                overflow-x: hidden; position: relative;
-                display: flex; justify-content: center; align-items: center;
-            }
-            .matrix-bg {
-                position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-                background: #000;
-                z-index: -1;
-            }
-            @keyframes bg-pulse {
-                0%, 100% { background: linear-gradient(45deg, #000 0%, #001100 50%, #000 100%); }
-                50% { background: linear-gradient(45deg, #000 0%, #002200 50%, #000 100%); }
-            }
-            .matrix-rain {
-                position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-                background: transparent;
-                z-index: -1;
-                display: none;
-            }
-            @keyframes matrix-fall {
-                0% { transform: translateY(-100%); }
-                100% { transform: translateY(100vh); }
-            }
-            .matrix-code-rain {
-                position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-                pointer-events: none; z-index: -1;
-                overflow: hidden;
-                display: none;
-            }
-            .matrix-column {
-                position: absolute; top: -100%; left: 0;
-                color: #00ff00; font-family: "Courier New", monospace;
-                font-size: 14px; line-height: 1.2;
-                text-shadow: 0 0 5px #00ff00;
-            }
-            @keyframes matrix-drop {
-                0% { top: -100%; opacity: 1; }
-                10% { opacity: 1; }
-                90% { opacity: 0.3; }
-                100% { top: 100vh; opacity: 0; }
-            }
-            .matrix-column:nth-child(odd) {
-                animation-duration: 12s;
-                animation-delay: -2s;
-            }
-            .matrix-column:nth-child(even) {
-                animation-duration: 18s;
-                animation-delay: -5s;
-            }
-            .matrix-column:nth-child(3n) {
-                animation-duration: 20s;
-                animation-delay: -8s;
-            }
-            .terminal {
-                width: 90%; max-width: 800px; height: 500px;
-                background: rgba(0, 0, 0, 0.9);
-                border: 2px solid #00ff00;
-                border-radius: 8px;
-                box-shadow: 0 0 30px rgba(0, 255, 0, 0.5), inset 0 0 20px rgba(0, 255, 0, 0.1);
-                backdrop-filter: blur(10px);
-                position: relative; z-index: 1;
-                overflow: hidden;
-            }
-            .terminal-header {
-                background: rgba(0, 20, 0, 0.8);
-                padding: 10px 15px;
-                border-bottom: 1px solid #00ff00;
-                display: flex; align-items: center;
-            }
-            .terminal-buttons {
-                display: flex; gap: 8px;
-            }
-            .terminal-button {
-                width: 12px; height: 12px; border-radius: 50%;
-                background: #ff5f57; border: none;
-            }
-            .terminal-button:nth-child(2) { background: #ffbd2e; }
-            .terminal-button:nth-child(3) { background: #28ca42; }
-            .terminal-title {
-                margin-left: 15px; color: #00ff00;
-                font-size: 14px; font-weight: bold;
-            }
-            .terminal-body {
-                padding: 20px; height: calc(100% - 50px);
-                overflow-y: auto; font-size: 14px;
-                line-height: 1.4;
-            }
-            .terminal-line {
-                margin-bottom: 8px; display: flex; align-items: center;
-            }
-            .terminal-prompt {
-                color: #00ff00; margin-right: 10px;
-                font-weight: bold;
-            }
-            .terminal-input {
-                background: transparent; border: none; outline: none;
-                color: #00ff00; font-family: "Courier New", monospace;
-                font-size: 14px; flex: 1;
-                caret-color: #00ff00;
-            }
-            .terminal-input::placeholder {
-                color: #00aa00; opacity: 0.7;
-            }
-            .terminal-cursor {
-                display: inline-block; width: 8px; height: 16px;
-                background: #00ff00;
-                margin-left: 2px;
-            }
-            @keyframes blink {
-                0%, 50% { opacity: 1; }
-                51%, 100% { opacity: 0; }
-            }
-            .terminal-output {
-                color: #00aa00; margin: 5px 0;
-            }
-            .terminal-error {
-                color: #ff4444; margin: 5px 0;
-            }
-            .terminal-success {
-                color: #44ff44; margin: 5px 0;
-            }
-            .matrix-text {
-                position: fixed; top: 20px; right: 20px;
-                color: #00ff00; font-family: "Courier New", monospace;
-                font-size: 0.8rem; opacity: 0.6;
-            }
-            @keyframes matrix-flicker {
-                0%, 100% { opacity: 0.6; }
-                50% { opacity: 1; }
-            }
-        </style>
-    </head>
-    <body>
-        <div class="matrix-bg"></div>
-        <div class="matrix-rain"></div>
-        <div class="matrix-code-rain" id="matrixCodeRain"></div>
-            <div class="matrix-text">${t.terminal}</div>
-            <div style="position: fixed; top: 20px; left: 20px; z-index: 1000;">
-                <select id="languageSelector" style="background: rgba(0, 20, 0, 0.9); border: 2px solid #00ff00; color: #00ff00; padding: 8px 12px; font-family: 'Courier New', monospace; font-size: 14px; cursor: pointer; text-shadow: 0 0 5px #00ff00; box-shadow: 0 0 15px rgba(0, 255, 0, 0.4);" onchange="changeLanguage(this.value)">
-                    <option value="zh" ${!isFarsi ? 'selected' : ''}>🇨🇳 中文</option>
-                    <option value="fa" ${isFarsi ? 'selected' : ''}>🇮🇷 فارسی</option>
-                </select>
-            </div>
-        <div class="terminal">
-            <div class="terminal-header">
-                <div class="terminal-buttons">
-                    <div class="terminal-button"></div>
-                    <div class="terminal-button"></div>
-                    <div class="terminal-button"></div>
-                </div>
-                    <div class="terminal-title">${t.terminal}</div>
-            </div>
-            <div class="terminal-body" id="terminalBody">
-                <div class="terminal-line">
-                    <span class="terminal-prompt">root:~$</span>
-                        <span class="terminal-output">${t.congratulations}</span>
-                </div>
-                <div class="terminal-line">
-                    <span class="terminal-prompt">root:~$</span>
-                        <span class="terminal-output">${cp && cp.trim() ? t.enterD : t.enterU}</span>
-                </div>
-                <div class="terminal-line">
-                    <span class="terminal-prompt">root:~$</span>
-                        <span class="terminal-output">${t.command}${cp && cp.trim() ? t.path : t.uuid}]</span>
-                </div>
-                <div class="terminal-line">
-                    <span class="terminal-prompt">root:~$</span>
-                        <input type="text" class="terminal-input" id="uuidInput" placeholder="${cp && cp.trim() ? t.inputD : t.inputU}" autofocus>
-                    <span class="terminal-cursor"></span>
-                </div>
-            </div>
-        </div>
-        <script>
-            function createMatrixRain() {
-                const matrixContainer = document.getElementById('matrixCodeRain');
-                const matrixChars = '01ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
-                const columns = Math.floor(window.innerWidth / 18);
-                
-                for (let i = 0; i < columns; i++) {
-                    const column = document.createElement('div');
-                    column.className = 'matrix-column';
-                    column.style.left = (i * 18) + 'px';
-                    column.style.animationDelay = Math.random() * 15 + 's';
-                    column.style.animationDuration = (Math.random() * 15 + 8) + 's';
-                    column.style.fontSize = (Math.random() * 4 + 12) + 'px';
-                    column.style.opacity = Math.random() * 0.8 + 0.2;
-                    
-                    let text = '';
-                    const charCount = Math.floor(Math.random() * 30 + 20);
-                    for (let j = 0; j < charCount; j++) {
-                        const char = matrixChars[Math.floor(Math.random() * matrixChars.length)];
-                        const brightness = Math.random() > 0.1 ? '#00ff00' : '#00aa00';
-                        text += '<span style="color: ' + brightness + ';">' + char + '</span><br>';
-                    }
-                    column.innerHTML = text;
-                    matrixContainer.appendChild(column);
-                }
-                
-                setInterval(function() {
-                    const columns = matrixContainer.querySelectorAll('.matrix-column');
-                    columns.forEach(function(column) {
-                        if (Math.random() > 0.95) {
-                            const chars = column.querySelectorAll('span');
-                            if (chars.length > 0) {
-                                const randomChar = chars[Math.floor(Math.random() * chars.length)];
-                                randomChar.style.color = '#ffffff';
-                                setTimeout(function() {
-                                    randomChar.style.color = '#00ff00';
-                                }, 200);
-                            }
-                        }
-                    });
-                }, 100);
-            }
-            
-            function isValidUUID(uuid) {
-                const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-                return uuidRegex.test(uuid);
-            }
-            
-            function addTerminalLine(content, type = 'output') {
-                const terminalBody = document.getElementById('terminalBody');
-                const line = document.createElement('div');
-                line.className = 'terminal-line';
-                
-                const prompt = document.createElement('span');
-                prompt.className = 'terminal-prompt';
-                prompt.textContent = 'root:~$';
-                
-                const output = document.createElement('span');
-                output.className = 'terminal-' + type;
-                output.textContent = content;
-                
-                line.appendChild(prompt);
-                line.appendChild(output);
-                terminalBody.appendChild(line);
-                
-                terminalBody.scrollTop = terminalBody.scrollHeight;
-            }
-            
-            function handleUUIDInput() {
-                const input = document.getElementById('uuidInput');
-                const inputValue = input.value.trim();
-                const cp = '${ cp }';
-                
-                if (inputValue) {
-                    addTerminalLine(atob('Y29ubmVjdCA=') + inputValue, 'output');
-                        
-                        const translations = {
-                            zh: {
-                                connecting: '正在连接...',
-                                invading: '正在入侵...',
-                                success: '连接成功！返回结果...',
-                                error: '错误: 无效的UUID格式',
-                                reenter: '请重新输入有效的UUID'
-                            },
-                            fa: {
-                                connecting: 'در حال اتصال...',
-                                invading: 'در حال نفوذ...',
-                                success: 'اتصال موفق! در حال بازگشت نتیجه...',
-                                error: 'خطا: فرمت UUID نامعتبر',
-                                reenter: 'لطفا UUID معتبر را دوباره وارد کنید'
-                            }
-                        };
-                        const browserLang = navigator.language || navigator.userLanguage || '';
-                        const isFarsi = browserLang.includes('fa') || browserLang.includes('fa-IR');
-                        const t = translations[isFarsi ? 'fa' : 'zh'];
-                    
-                    if (cp) {
-                        const cleanInput = inputValue.startsWith('/') ? inputValue : '/' + inputValue;
-                            addTerminalLine(t.connecting, 'output');
-                        setTimeout(() => {
-                                addTerminalLine(t.success, 'success');
-                            setTimeout(() => {
-                                window.location.href = cleanInput;
-                            }, 1000);
-                        }, 500);
-                    } else {
-                        if (isValidUUID(inputValue)) {
-                            addTerminalLine(t.invading, 'output');
-                        setTimeout(() => {
-                                addTerminalLine(t.success, 'success');
-                            setTimeout(() => {
-                                    window.location.href = '/' + inputValue;
-                            }, 1000);
-                        }, 500);
-                    } else {
-                            addTerminalLine(t.error, 'error');
-                            addTerminalLine(t.reenter, 'output');
-                        }
-                    }
-                    
-                    input.value = '';
-                }
-            }
-                
-                function changeLanguage(lang) {
-                    localStorage.setItem('preferredLanguage', lang);
-                    // 设置Cookie（有效期1年）
-                    const expiryDate = new Date();
-                    expiryDate.setFullYear(expiryDate.getFullYear() + 1);
-                    document.cookie = 'preferredLanguage=' + lang + '; path=/; expires=' + expiryDate.toUTCString() + '; SameSite=Lax';
-                    // 刷新页面，不使用URL参数
-                    window.location.reload();
-                }
-                
-                // 页面加载时检查 localStorage 和 Cookie，并清理URL参数
-                window.addEventListener('DOMContentLoaded', function() {
-                    function getCookie(name) {
-                        const value = '; ' + document.cookie;
-                        const parts = value.split('; ' + name + '=');
-                        if (parts.length === 2) return parts.pop().split(';').shift();
-                        return null;
-                    }
-                    
-                    const savedLang = localStorage.getItem('preferredLanguage') || getCookie('preferredLanguage');
-                    const urlParams = new URLSearchParams(window.location.search);
-                    const urlLang = urlParams.get('lang');
-                    
-                    // 如果URL中有语言参数，移除它并设置Cookie
-                    if (urlLang) {
-                        const currentUrl = new URL(window.location.href);
-                        currentUrl.searchParams.delete('lang');
-                        const newUrl = currentUrl.toString();
-                        
-                        // 设置Cookie
-                        const expiryDate = new Date();
-                        expiryDate.setFullYear(expiryDate.getFullYear() + 1);
-                        document.cookie = 'preferredLanguage=' + urlLang + '; path=/; expires=' + expiryDate.toUTCString() + '; SameSite=Lax';
-                        localStorage.setItem('preferredLanguage', urlLang);
-                        
-                        // 使用history API移除URL参数，不刷新页面
-                        window.history.replaceState({}, '', newUrl);
-                    } else if (savedLang) {
-                        // 如果localStorage中有但Cookie中没有，同步到Cookie
-                        const expiryDate = new Date();
-                        expiryDate.setFullYear(expiryDate.getFullYear() + 1);
-                        document.cookie = 'preferredLanguage=' + savedLang + '; path=/; expires=' + expiryDate.toUTCString() + '; SameSite=Lax';
-                    }
-                });
-            
-            document.addEventListener('DOMContentLoaded', function() {
-                const input = document.getElementById('uuidInput');
-                input.focus();
-                input.addEventListener('keypress', function(e) {
-                    if (e.key === 'Enter') {
-                        handleUUIDInput();
-                    }
-                });
-            });
-        </script>
-    </body>
-    </html>`;
+    .top-right-message {
+        position: fixed;
+        top: 18px;
+        right: 32px;
+        color: #fff;
+        font-size: 15px;
+        z-index: 9999;
+        background: rgba(0,0,0,0.25);
+        padding: 6px 16px;
+        border-radius: 16px;
+        pointer-events: none;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        letter-spacing: 1px;
+    }
+    body {
+        margin: 0;
+        height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #0d0f12;
+        font-family: Consolas, monospace;
+        color: #d0d0d0;
+        transition: background-image 0.5s;
+    }
+
+    .panel {
+        width: 420px;
+        background: rgba(22,26,32,0.92);
+        border: 1px solid #2a2f3a;
+        border-radius: 6px;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+        padding: 24px;
+    }
+
+    .title {
+        font-size: 14px;
+        color: #8aa4ff;
+        margin-bottom: 16px;
+    }
+
+    .line {
+        margin-bottom: 10px;
+        font-size: 13px;
+    }
+
+    .prompt {
+        color: #7fff9c;
+    }
+
+    input {
+        width: 100%;
+        margin-top: 6px;
+        padding: 8px 10px;
+        background: #0d1117;
+        border: 1px solid #30363d;
+        color: #c9d1d9;
+        font-family: Consolas, monospace;
+        font-size: 13px;
+        border-radius: 4px;
+        outline: none;
+    }
+
+    input:focus {
+        border-color: #58a6ff;
+    }
+
+    .hint {
+        margin-top: 12px;
+        font-size: 12px;
+        color: #8b949e;
+    }
+
+    .error {
+        color: #ff6b6b;
+        font-size: 12px;
+        margin-top: 8px;
+    }
+</style>
+</head>
+
+<body>
+<div class="top-right-message">主题重构by hero<br>源码by joeyblog<br>本项目仅供学习交流</div>
+<div class="panel">
+    <div class="title">cfnew订阅中心</div>
+
+    <div class="line">
+        <span class="prompt">root@cfworker</span>:~$
+        输入 UUID or PATH
+    </div>
+
+    <input id="input" placeholder=" " autofocus />
+
+    <div id="error" class="error" style="display:none;"></div>
+
+    <div class="hint">
+        Press Enter to continue
+    </div>
+</div>
+
+<script>
+    // 使用 picsum.photos 随机图片作为背景
+    (function() {
+        var url = 'https://picsum.photos/1920/1080?random=' + Math.floor(Math.random()*10000);
+       document.body.style.backgroundImage = 'url("' + url + '")';
+        document.body.style.backgroundSize = 'cover';
+       document.body.style.backgroundPosition = 'center center';
+     })();
+
+    const input = document.getElementById('input');
+    const errorBox = document.getElementById('error');
+
+    function isUUID(v) {
+        return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
+    }
+
+    input.addEventListener('keydown', function (e) {
+        if (e.key !== 'Enter') return;
+
+        const value = input.value.trim();
+        errorBox.style.display = 'none';
+
+        if (!value) return;
+
+        if (value.startsWith('/')) {
+            location.href = value;
+            return;
+        }
+
+        if (!isUUID(value)) {
+            errorBox.textContent = 'Invalid UUID format';
+            errorBox.style.display = 'block';
+            return;
+        }
+
+        location.href = '/' + value;
+    });
+</script>
+</body>
+</html>`;
                         return new Response(terminalHtml, { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } });
                     }
                 
@@ -1983,7 +1767,7 @@
                         KR: '🇰🇷 韩国', DE: '🇩🇪 德国', SE: '🇸🇪 瑞典', NL: '🇳🇱 荷兰',
                         FI: '🇫🇮 芬兰', GB: '🇬🇧 英国'
                     },
-                    terminal: '终端 v2.8',
+                    terminal: '终端 v2.9',
                     githubProject: 'GitHub 项目',
                     autoDetectClient: '自动识别',
                 selectionLogicText: '同地区 → 邻近地区 → 其他地区',
@@ -2114,7 +1898,7 @@
                         KR: '🇰🇷 کره جنوبی', DE: '🇩🇪 آلمان', SE: '🇸🇪 سوئد', NL: '🇳🇱 هلند',
                         FI: '🇫🇮 فنلاند', GB: '🇬🇧 بریتانیا'
                     },
-                    terminal: 'ترمینال v2.8',
+                    terminal: 'ترمینال v2.9',
                     githubProject: 'پروژه GitHub',
                     autoDetectClient: 'تشخیص خودکار',
                 selectionLogicText: 'هم‌منطقه → منطقه مجاور → سایر مناطق',
@@ -2153,204 +1937,393 @@
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>${t.title}</title>
         <style>
-            * { margin: 0; padding: 0; box-sizing: border-box; }
-            body {
-                font-family: "Courier New", monospace;
-                background: #000; color: #00ff00; min-height: 100vh;
-                overflow-x: hidden; position: relative;
-            }
-            .matrix-bg {
-                position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-                background: #000;
-                z-index: -1;
-            }
-            @keyframes bg-pulse {
-                0%, 100% { background: linear-gradient(45deg, #000 0%, #001100 50%, #000 100%); }
-                50% { background: linear-gradient(45deg, #000 0%, #002200 50%, #000 100%); }
-            }
-            .matrix-rain {
-                position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-                background: transparent;
-                z-index: -1;
-                display: none;
-            }
-            @keyframes matrix-fall {
-                0% { transform: translateY(-100%); }
-                100% { transform: translateY(100vh); }
-            }
-            .matrix-code-rain {
-                position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-                pointer-events: none; z-index: -1;
-                overflow: hidden;
-                display: none;
-            }
-            .matrix-column {
-                position: absolute; top: -100%; left: 0;
-                color: #00ff00; font-family: "Courier New", monospace;
-                font-size: 14px; line-height: 1.2;
-                text-shadow: 0 0 5px #00ff00;
-            }
-            @keyframes matrix-drop {
-                0% { top: -100%; opacity: 1; }
-                10% { opacity: 1; }
-                90% { opacity: 0.3; }
-                100% { top: 100vh; opacity: 0; }
-            }
-            .matrix-column:nth-child(odd) {
-                animation-duration: 12s;
-                animation-delay: -2s;
-            }
-            .matrix-column:nth-child(even) {
-                animation-duration: 18s;
-                animation-delay: -5s;
-            }
-            .matrix-column:nth-child(3n) {
-                animation-duration: 20s;
-                animation-delay: -8s;
-            }
-            .container { max-width: 900px; margin: 0 auto; padding: 20px; position: relative; z-index: 1; }
-            .header { text-align: center; margin-bottom: 40px; }
-            .title {
-                font-size: 3.5rem; font-weight: bold;
-                text-shadow: 0 0 10px #00ff00, 0 0 20px #00ff00, 0 0 30px #00ff00, 0 0 40px #00ff00;
-                margin-bottom: 10px;
-                position: relative;
-                color: #00ff00;
-            }
-            @keyframes matrix-glow {
-                from { text-shadow: 0 0 10px #00ff00, 0 0 20px #00ff00, 0 0 30px #00ff00, 0 0 40px #00ff00; }
-                to { text-shadow: 0 0 20px #00ff00, 0 0 30px #00ff00, 0 0 40px #00ff00, 0 0 50px #00ff00; }
-            }
-            @keyframes matrix-pulse {
-                0%, 100% { background-position: 0% 50%; }
-                50% { background-position: 100% 50%; }
-            }
-            .subtitle { color: #00aa00; margin-bottom: 30px; font-size: 1.2rem; }
-            .card {
-                background: rgba(0, 20, 0, 0.9);
-                border: 2px solid #00ff00;
-                border-radius: 0; padding: 30px; margin-bottom: 20px;
-                box-shadow: 0 0 30px rgba(0, 255, 0, 0.5), inset 0 0 20px rgba(0, 255, 0, 0.1);
-                position: relative;
-                backdrop-filter: blur(10px);
-                box-sizing: border-box;
-                width: 100%;
-                max-width: 100%;
-            }
-            @keyframes card-glow {
-                0%, 100% { box-shadow: 0 0 30px rgba(0, 255, 0, 0.5), inset 0 0 20px rgba(0, 255, 0, 0.1); }
-                50% { box-shadow: 0 0 40px rgba(0, 255, 0, 0.7), inset 0 0 30px rgba(0, 255, 0, 0.2); }
-            }
-            .card::before {
-                content: ""; position: absolute; top: 0; left: 0;
-                width: 100%; height: 100%;
-                background: none;
-                opacity: 0; pointer-events: none;
-            }
-            @keyframes scan-line {
-                0% { transform: translateX(-100%); }
-                100% { transform: translateX(100%); }
-            }
-            .card-title {
-                font-size: 1.8rem; margin-bottom: 20px;
-                color: #00ff00; text-shadow: 0 0 5px #00ff00;
-            }
-            .client-grid {
-                display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-                gap: 15px; margin: 20px 0;
-            }
-            .client-btn {
-                background: rgba(0, 20, 0, 0.8);
-                border: 2px solid #00ff00;
-                padding: 15px 20px; color: #00ff00;
-                font-family: "Courier New", monospace; font-weight: bold;
-                cursor: pointer; transition: all 0.4s ease;
-                text-align: center; position: relative;
-                overflow: hidden;
-                text-shadow: 0 0 5px #00ff00;
-                box-shadow: 0 0 10px rgba(0, 255, 0, 0.3);
-            }
-            .client-btn::before {
-                content: ""; position: absolute; top: 0; left: -100%;
-                width: 100%; height: 100%;
-                background: linear-gradient(90deg, transparent, rgba(0,255,0,0.4), transparent);
-                transition: left 0.6s ease;
-            }
-            .client-btn::after {
-                content: ""; position: absolute; top: 0; left: 0;
-                width: 100%; height: 100%;
-                background: linear-gradient(45deg, transparent 30%, rgba(0,255,0,0.1) 50%, transparent 70%);
-                opacity: 0;
-                transition: opacity 0.3s ease;
-            }
-            .client-btn:hover::before { left: 100%; }
-            .client-btn:hover::after { opacity: 1; }
-            .client-btn:hover {
-                background: rgba(0, 255, 0, 0.3);
-                box-shadow: 0 0 25px #00ff00, 0 0 35px rgba(0, 255, 0, 0.5);
-                transform: translateY(-3px) scale(1.05);
-                text-shadow: 0 0 10px #00ff00, 0 0 20px #00ff00;
-            }
-            .generate-btn {
-                background: rgba(0, 255, 0, 0.15);
-                border: 2px solid #00ff00; padding: 15px 30px;
-                color: #00ff00; font-family: "Courier New", monospace;
-                font-weight: bold; cursor: pointer;
-                transition: all 0.4s ease; margin-right: 15px;
-                text-shadow: 0 0 8px #00ff00;
-                box-shadow: 0 0 15px rgba(0, 255, 0, 0.4);
-                position: relative;
-                overflow: hidden;
-            }
-            .generate-btn::before {
-                content: ""; position: absolute; top: 0; left: -100%;
-                width: 100%; height: 100%;
-                background: linear-gradient(90deg, transparent, rgba(0,255,0,0.5), transparent);
-                transition: left 0.8s ease;
-            }
-            .generate-btn:hover::before { left: 100%; }
-            .generate-btn:hover {
-                background: rgba(0, 255, 0, 0.4);
-                box-shadow: 0 0 30px #00ff00, 0 0 40px rgba(0, 255, 0, 0.6);
-                transform: translateY(-4px) scale(1.08);
-                text-shadow: 0 0 15px #00ff00, 0 0 25px #00ff00;
-            }
-            .atob('c3Vic2NyaXB0aW9u')-url {
-                background: rgba(0, 0, 0, 0.9);
-                border: 2px solid #00ff00; padding: 15px;
-                word-break: break-all; font-family: "Courier New", monospace;
-                color: #00ff00; margin-top: 20px; display: none;
-                box-shadow: inset 0 0 15px rgba(0, 255, 0, 0.4), 0 0 20px rgba(0, 255, 0, 0.3);
-                border-radius: 5px;
-                position: relative;
-                overflow-wrap: break-word;
-                overflow-x: auto;
-                max-width: 100%;
-                box-sizing: border-box;
-            }
-            @keyframes url-glow {
-                from { box-shadow: inset 0 0 15px rgba(0, 255, 0, 0.4), 0 0 20px rgba(0, 255, 0, 0.3); }
-                to { box-shadow: inset 0 0 20px rgba(0, 255, 0, 0.6), 0 0 30px rgba(0, 255, 0, 0.5); }
-            }
-            .atob('c3Vic2NyaXB0aW9u')-url::before {
-                content: ""; position: absolute; top: 0; left: -100%;
-                width: 100%; height: 100%;
-                background: none;
-            }
-            @keyframes url-scan {
-                0% { left: -100%; }
-                100% { left: 100%; }
-            }
-            .matrix-text {
-                position: fixed; top: 20px; right: 20px;
-                color: #00ff00; font-family: "Courier New", monospace;
-                font-size: 0.8rem; opacity: 0.6;
-            }
-            @keyframes matrix-flicker {
-                0%, 100% { opacity: 0.6; }
-                50% { opacity: 1; }
-            }
-        </style>
+    
+    
+        /* 1. 定义现代色调 */
+    :root {
+        --primary: #6366f1;
+        --bg: #0f172a;
+        --card: #1e293b;
+        --text: #f8fafc;
+        --accent: #22d3ee;
+        --border: rgba(255, 255, 255, 0.08);
+    }
+
+    /* 2. 基础布局重置 - 彻底去绿 */
+    body {
+        .matrix-bg, .matrix-rain, .matrix-code-rain, #matrixCodeRain, .matrix-text {
+        display: none !important;
+    }
+    /* 在这里替换你的图片地址 */
+        background: linear-gradient(rgba(15, 23, 42, 0.8), rgba(15, 23, 42, 0.8)), 
+                    url('https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=2072&auto=format&fit=crop') !important;
+        
+        background-size: cover !important;        /* 背景图全屏覆盖 */
+        background-position: center !important;    /* 图片居中 */
+        background-attachment: fixed !important;  /* 滚动时背景固定，很有高级感 */
+        
+        color: var(--text) !important;
+        font-family: 'Segoe UI', system-ui, sans-serif !important;
+        margin: 0; padding: 0;
+        min-height: 100vh;
+    }
+
+/* 2. 极致透明卡片（电脑和手机通用） */
+    .card {
+        /* 0.15 代表 15% 的底色，85% 都是透明的 */
+        background: rgba(15, 23, 42, 0.15) !important; 
+        
+        /* 毛玻璃模糊，建议保留 5px-8px，否则背景太花会导致文字看不清 */
+        backdrop-filter: blur(8px) !important;
+        -webkit-backdrop-filter: blur(8px) !important;
+        
+        /* 边框也调淡，不遮挡视线 */
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        
+        box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.2) !important;
+    }
+
+    /* 3. 让原本绿色的框也变透明 */
+    [style*="border: 1px solid #00ff00"], fieldset, #latencyResultsList {
+        background: rgba(0, 0, 0, 0.1) !important;
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    }
+
+    /* 同时让输入框也带一点半透明，整体更统一 */
+    input[type="text"], input[type="number"], select {
+        background: rgba(0, 0, 0, 0.2) !important;
+        backdrop-filter: blur(4px) !important;
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        color: white !important;
+    }
+    /* 3. 核心容器：强行改为左右双栏 */
+    .container {
+        max-width: 1200px !important;
+        margin: 0 auto !important;
+        padding: 30px !important;
+        display: grid !important;
+        grid-template-columns: 320px 1fr !important; /* 左栏固定，右栏自适应 */
+        gap: 25px !important;
+    }
+
+    /* 头部跨两栏 */
+    .header {
+        grid-column: 1 / -1 !important;
+        border-bottom: 1px solid var(--border);
+        padding-bottom: 20px;
+        margin-bottom: 10px;
+    }
+    .title { font-size: 2rem !important; font-weight: 800 !important; color: #fff !important; text-shadow: none !important; }
+
+    /* 4. 卡片(Card)美化 - 把你那一堆内容包起来 */
+    .card {
+        background: var(--card) !important;
+        border: 1px solid var(--border) !important;
+        border-radius: 16px !important;
+        padding: 25px !important;
+        box-shadow: 0 10px 25px -5px rgba(0,0,0,0.3) !important;
+        margin-bottom: 0 !important;
+    }
+
+    /* 重点：利用 Order 让原本在后面的“系统状态”跑到左边去 */
+    .card:nth-of-type(2) { grid-column: 1 !important; grid-row: 2 !important; height: fit-content; }
+    .card:nth-of-type(1) { grid-column: 2 !important; grid-row: 2 !important; }
+    #configCard { grid-column: 2 !important; }
+
+    /* 5. 表单元素整齐美化 */
+    input[type="text"], input[type="number"], select {
+        width: 100% !important;
+        padding: 12px !important;
+        background: rgba(0,0,0,0.2) !important;
+        border: 1px solid var(--border) !important;
+        border-radius: 8px !important;
+        color: #fff !important;
+        margin: 10px 0 !important;
+        outline: none;
+    }
+    input:focus { border-color: var(--primary) !important; }
+
+    /* 复选框排版 */
+    .card label {
+        display: flex; align-items: center; gap: 10px;
+        margin: 12px 0; color: var(--accent); cursor: pointer;
+    }
+
+    /* 6. 按钮高级感 */
+    .client-btn, .generate-btn, button[type="submit"], #startLatencyTest {
+        background: var(--primary) !important;
+        color: white !important;
+        border: none !important;
+        padding: 12px 18px !important;
+        border-radius: 10px !important;
+        font-weight: 600 !important;
+        cursor: pointer !important;
+        transition: 0.2s ease !important;
+        margin: 5px 0 !important;
+        text-shadow: none !important;
+    }
+    .client-btn:hover { background: #4f46e5 !important; transform: translateY(-2px); }
+
+    /* 客户端选择器的网格化 */
+    #clientButtons {
+        display: grid !important;
+        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)) !important;
+        gap: 10px !important;
+    }
+
+    /* 测速结果显示区 */
+    #latencyResultsList {
+        background: #000 !important;
+        padding: 15px !important;
+        border-radius: 10px !important;
+        font-family: 'Consolas', monospace !important;
+        font-size: 13px !important;
+        line-height: 1.6;
+    }
+
+    /* 适配手机端 */
+    @media (max-width: 900px) {
+        .container { grid-template-columns: 1fr !important; }
+        .card { grid-column: 1 !important; }
+    }
+
+    /* 彻底消除残留绿色 */
+#kvStatus, #regionStatus, #currentIP, #backupStatus, 
+#latencyResultsList, .card div, .card p, span, h1, h2 {
+    color: #f8fafc !important; /* 统一改为白色文字 */
+    text-shadow: none !important; /* 去掉发光效果 */
+}
+
+/* 针对原本那个绿色的检测状态框 */
+div[style*="border: 1px solid #4f46e5"], 
+div[style*="border: 1px solid green"],
+.status-item, 
+#systemStatus div {
+    border: 1px solid rgba(255, 255, 255, 0.1) !important; /* 绿色边框变半透明白 */
+    background: rgba(0, 0, 0, 0.2) !important;
+    border-radius: 8px !important;
+}
+
+/* 按钮文字和图标颜色微调 */
+.client-btn, .btn-action {
+    color: #ffffff !important;
+}
+
+/* 针对图片中那个“检测中...”的绿色容器 */
+#systemStatus, #kvStatus {
+    border: 1px solid var(--primary) !important; /* 改为柔和的蓝色边缘 */
+    color: var(--accent) !important;
+}
+
+/* 隐藏所有带 matrix 类名的残留元素 */
+.matrix-text, .matrix-border, .matrix-rain {
+    display: none !important;
+}
+/* 1. 强行拦截所有带有绿色边框的行内样式 */
+div[style*="00ff00"], 
+div[style*="green"], 
+div[style*="lime"],
+fieldset {
+    border-color: rgba(99, 102, 241, 0.5) !important; /* 强制变蓝或半透明白 */
+    box-shadow: 0 0 10px rgba(99, 102, 241, 0.2) !important;
+}
+
+/* 2. 强行拦截所有带绿色文字的行内样式 */
+*[style*="color: #4f46e5"], 
+*[style*="color: green"], 
+*[style*="color: lime"],
+.status-text, 
+#kvStatus,
+#systemStatus b {
+    color: #22d3ee !important; /* 强制变青蓝色或白色 */
+    text-shadow: none !important;
+}
+
+/* 3. 针对延迟测试模块的那个大绿框 */
+#latencyResultsList, 
+div[id^="latency"] {
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    background: rgba(0, 0, 0, 0.3) !important;
+    color: #f8fafc !important;
+}
+
+/* 4. 针对那个绿色的“生成IP”和状态标签 */
+span[style*="background-color: #4f46e5"],
+.badge-green {
+    background-color: var(--primary) !important;
+    color: white !important;
+}
+
+/* 5. 修正输入框提示文字的颜色（图中那些暗绿色） */
+.card p, .card span, label {
+    color: #94a3b8 !important; /* 改为现代感十足的灰蓝色 */
+}
+/* --- 强力覆盖脚本硬编码的绿色 --- */
+
+/* 1. 强制拦截所有内联绿色边框 (id=00ff00) */
+[style*="border: 1px solid #4f46e5"], 
+[style*="border: 1px solid green"],
+.status-item, fieldset, #latencyResultsList {
+    border: 1px solid rgba(99, 102, 241, 0.4) !important; /* 统一改为半透明淡蓝 */
+    background: rgba(15, 23, 42, 0.5) !important;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2) !important;
+}
+
+/* 2. 强制拦截所有亮绿色文字 */
+[style*="color: #4f46e5"], 
+[style*="color: green"],
+.status-text, #kvStatus b, #systemStatus b {
+    color: #22d3ee !important; /* 统一改为电光青色 */
+    text-shadow: none !important;
+}
+
+/* 3. 输入框和提示文字美化 (去暗绿) */
+.card p, .card span, label, .help-text {
+    color: #cbd5e1 !important; /* 改为明亮的灰白色，方便阅读 */
+}
+
+/* 4. 延迟测试按钮和生成按钮 */
+button#startLatencyTest, button[onclick*="generate"] {
+    background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%) !important;
+    border: none !important;
+    color: white !important;
+}
+
+/* 5. 半透明卡片深度优化 */
+.card {
+    background: rgba(15, 23, 42, 0.7) !important;
+    backdrop-filter: blur(16px) !important;
+    -webkit-backdrop-filter: blur(16px) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    transition: all 0.3s ease;
+}
+
+/* 6. 修正顶部语言切换器的绿色阴影 */
+#languageSelector {
+    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+    background: rgba(0, 0, 0, 0.4) !important;
+}
+/* --- 彻底重塑选择框(Select)样式 --- */
+select {
+    /* 基础造型：深色半透明 */
+    background: rgba(15, 23, 42, 0.7) !important;
+    color: #22d3ee !important; /* 电光青文字 */
+    border: 1px solid rgba(99, 102, 241, 0.5) !important; /* 紫色边框 */
+    border-radius: 8px !important;
+    padding: 10px 15px !important;
+    font-size: 14px !important;
+    cursor: pointer !important;
+    
+    /* 去除原生外观 */
+    appearance: none !important;
+    -webkit-appearance: none !important;
+    -moz-appearance: none !important;
+    
+    /* 添加自定义下拉箭头 (一个白色小三角) */
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'%3E%3C/path%3E%3C/svg%3E") !important;
+    background-repeat: no-repeat !important;
+    background-position: right 15px center !important;
+    background-size: 12px !important;
+    padding-right: 40px !important;
+    
+    transition: all 0.3s ease !important;
+    outline: none !important;
+}
+
+/* 悬停时边框加亮 */
+select:hover {
+    border-color: #6366f1 !important;
+    background-color: rgba(30, 41, 59, 0.8) !important;
+    box-shadow: 0 0 10px rgba(99, 102, 241, 0.3) !important;
+}
+
+/* 重点：优化下拉列表(Option)的样式 (部分浏览器支持) */
+select option {
+    background-color: #1e293b !important; /* 深色背景 */
+    color: #ffffff !important;
+    padding: 10px !important;
+}
+
+/* 针对那个“指定地区”的特定标签美化 */
+label[for="wkRegion"], label {
+    font-weight: 600 !important;
+    color: #a855f7 !important; /* 紫色标题 */
+    margin-top: 15px !important;
+    display: block !important;
+}
+/* --- 手机端(移动端) 终极单列美化 --- */
+@media (max-width: 768px) {
+    /* 1. 强制所有容器为单列 */
+    .container {
+        display: block !important; /* 放弃 Grid，回归简单块布局 */
+        padding: 12px !important;
+    }
+
+    /* 2. 让每一张卡片都撑满宽度，并增加间距 */
+    .card {
+        width: 100% !important;
+        margin: 0 0 20px 0 !important;
+        padding: 18px !important;
+        box-sizing: border-box !important;
+        grid-column: auto !important; /* 重置之前双栏的定位 */
+        grid-row: auto !important;
+    }
+
+    /* 3. 按钮组也改为单列（或者两列自适应，防止太长） */
+    #clientButtons, .client-grid {
+        display: grid !important;
+        grid-template-columns: 1fr !important; /* 彻底单列 */
+        gap: 10px !important;
+    }
+    
+    /* 如果单列按钮太占地方，可以维持 2 列 */
+    /* grid-template-columns: repeat(2, 1fr) !important; */
+
+    /* 4. 优化输入框触控：全宽且大字号 */
+    input[type="text"], input[type="number"], select {
+        width: 100% !important;
+        height: 48px !important; /* 增加高度方便点击 */
+        font-size: 16px !important; /* 解决 iOS 输入框自动缩放问题 */
+        margin: 8px 0 !important;
+    }
+
+    /* 5. 标题和状态栏居中，更符合手机审美 */
+    .header {
+        text-align: center !important;
+        margin-bottom: 20px !important;
+    }
+    
+    #systemStatus, #kvStatus {
+        font-size: 13px !important;
+        line-height: 1.6 !important;
+    }
+
+    /* 6. 隐藏不必要的桌面端装饰 */
+    .desktop-only {
+        display: none !important;
+    }
+}
+/* 2. 极致透明卡片（电脑和手机通用） */
+    .card {
+        /* 0.1 代表 10% 的底色，90% 都是透明的 */
+        background: rgba(15, 23, 42, 0.1) !important; 
+        
+        /* 毛玻璃模糊，建议保留 5px-8px，否则背景太花会导致文字看不清 */
+        backdrop-filter: blur(4px) !important;
+        -webkit-backdrop-filter: blur(4px) !important;
+        
+        /* 边框也调淡，不遮挡视线 */
+        border: 1px solid rgba(255, 255, 255, 0) !important;
+        
+        box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.2) !important;
+    }
+
+    /* 3. 让原本绿色的框也变透明 */
+    [style*="border: 1px solid #00ff00"], fieldset, #latencyResultsList {
+        background: rgba(0, 0, 0, 0.1) !important;
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    }
+</style>
     </head>
     <body>
         <div class="matrix-bg"></div>
@@ -2529,8 +2502,24 @@
                                         <button type="button" id="deselectAllResults" style="background: transparent; border: 1px solid #00aa00; padding: 4px 10px; color: #00aa00; font-size: 0.8rem; cursor: pointer;">${t.deselectAll}</button>
                                     </div>
                                 </div>
+                                <div id="cityFilterContainer" style="margin-bottom: 10px; padding: 10px; background: rgba(0, 20, 0, 0.6); border: 1px solid #00aa00; border-radius: 4px; display: none;">
+                                    <div style="margin-bottom: 8px;">
+                                        <label style="display: inline-flex; align-items: center; cursor: pointer; color: #00ff00; font-size: 0.9rem;">
+                                            <input type="radio" name="cityFilterMode" value="all" checked style="margin-right: 6px; width: 16px; height: 16px; cursor: pointer;">
+                                            <span>${isFarsi ? '全部城市' : '全部城市'}</span>
+                                        </label>
+                                        <label style="display: inline-flex; align-items: center; cursor: pointer; color: #00ff00; font-size: 0.9rem; margin-left: 15px;">
+                                            <input type="radio" name="cityFilterMode" value="fastest10" style="margin-right: 6px; width: 16px; height: 16px; cursor: pointer;">
+                                            <span>${isFarsi ? '只选择最快的10个' : '只选择最快的10个'}</span>
+                                        </label>
+                                    </div>
+                                    <div id="cityCheckboxesContainer" style="display: flex; flex-wrap: wrap; gap: 8px; max-height: 80px; overflow-y: auto; padding: 5px;"></div>
+                                </div>
                                 <div id="latencyResultsList" style="background: rgba(0, 0, 0, 0.5); border: 1px solid #004400; border-radius: 4px; padding: 10px;"></div>
-                                <button type="button" id="addSelectedToYx" style="margin-top: 10px; background: rgba(0, 200, 0, 0.3); border: 1px solid #00ff00; padding: 10px 20px; color: #00ff00; font-family: 'Courier New', monospace; font-weight: bold; cursor: pointer; width: 100%; transition: all 0.3s;">✓ ${t.addSelectedToYx}</button>
+                                <div style="margin-top: 10px; display: flex; gap: 10px;">
+                                    <button type="button" id="overwriteSelectedToYx" style="flex: 1; background: rgba(0, 200, 0, 0.3); border: 1px solid #00ff00; padding: 10px 20px; color: #00ff00; font-family: 'Courier New', monospace; font-weight: bold; cursor: pointer; transition: all 0.3s;">${isFarsi ? '覆盖添加' : '覆盖添加'}</button>
+                                    <button type="button" id="appendSelectedToYx" style="flex: 1; background: rgba(0, 150, 0, 0.3); border: 1px solid #00aa00; padding: 10px 20px; color: #00aa00; font-family: 'Courier New', monospace; font-weight: bold; cursor: pointer; transition: all 0.3s;">${isFarsi ? '追加添加' : '追加添加'}</button>
+                                </div>
                             </div>
                         </div>
                         
@@ -3654,7 +3643,8 @@
                 const testStatus = document.getElementById('latencyTestStatus');
                 const testResultsDiv = document.getElementById('latencyTestResults');
                 const resultsList = document.getElementById('latencyResultsList');
-                const addSelectedBtn = document.getElementById('addSelectedToYx');
+                const overwriteSelectedBtn = document.getElementById('overwriteSelectedToYx');
+                const appendSelectedBtn = document.getElementById('appendSelectedToYx');
                 const selectAllBtn = document.getElementById('selectAllResults');
                 const deselectAllBtn = document.getElementById('deselectAllResults');
                 const ipSourceSelect = document.getElementById('ipSourceSelect');
@@ -3696,6 +3686,10 @@
                     randomIPCount.addEventListener('input', function() {
                         localStorage.setItem('randomIPCount', this.value);
                     });
+                    // 初始化时，如果默认是隐藏的，则禁用输入框
+                    if (randomCountDiv && randomCountDiv.style.display === 'none') {
+                        randomIPCount.disabled = true;
+                    }
                 }
                 const testThreadsInput = document.getElementById('testThreads');
                 if (testThreadsInput) {
@@ -3707,12 +3701,17 @@
                 }
                 if (ipSourceSelect) {
                     const savedSource = localStorage.getItem('ipSourceSelect');
+                    const currentSource = savedSource || ipSourceSelect.value || 'manual';
                     if (savedSource) {
                         ipSourceSelect.value = savedSource;
-                        manualInputDiv.style.display = savedSource === 'manual' ? 'block' : 'none';
-                        urlFetchDiv.style.display = savedSource === 'urlFetch' ? 'block' : 'none';
-                        cfRandomDiv.style.display = savedSource === 'cfRandom' ? 'block' : 'none';
-                        randomCountDiv.style.display = savedSource === 'cfRandom' ? 'block' : 'none';
+                    }
+                    manualInputDiv.style.display = currentSource === 'manual' ? 'block' : 'none';
+                    urlFetchDiv.style.display = currentSource === 'urlFetch' ? 'block' : 'none';
+                    cfRandomDiv.style.display = currentSource === 'cfRandom' ? 'block' : 'none';
+                    randomCountDiv.style.display = currentSource === 'cfRandom' ? 'block' : 'none';
+                    // 当隐藏时禁用输入框，避免表单验证错误
+                    if (randomIPCount) {
+                        randomIPCount.disabled = currentSource !== 'cfRandom';
                     }
                 }
                 
@@ -3753,6 +3752,10 @@
                         urlFetchDiv.style.display = value === 'urlFetch' ? 'block' : 'none';
                         cfRandomDiv.style.display = value === 'cfRandom' ? 'block' : 'none';
                         randomCountDiv.style.display = value === 'cfRandom' ? 'block' : 'none';
+                        // 当隐藏时禁用输入框，避免表单验证错误
+                        if (randomIPCount) {
+                            randomIPCount.disabled = value !== 'cfRandom';
+                        }
                     });
                 }
                 
@@ -3843,6 +3846,9 @@
                         testResultsDiv.style.display = 'block';
                         resultsList.innerHTML = '';
                         testResults = [];
+                        if (cityFilterContainer) {
+                            cityFilterContainer.style.display = 'none';
+                        }
                         
                         testAbortController = new AbortController();
                         
@@ -3875,14 +3881,19 @@
                             return { host, port, nodeName };
                         }
                         
-                        function renderResult(result, index) {
+                        function renderResult(result, index, shouldShow = true) {
                             // 只展示在线优选成功的结果，失败/超时的不再显示
                             if (!result.success) {
-                                return;
+                                return null;
                             }
                             
                             const resultItem = document.createElement('div');
                             resultItem.style.cssText = 'display: flex; align-items: center; padding: 8px; border-bottom: 1px solid #003300; gap: 10px;';
+                            resultItem.dataset.index = index;
+                            resultItem.dataset.colo = result.colo || '';
+                            if (!shouldShow) {
+                                resultItem.style.display = 'none';
+                            }
                             
                             const checkbox = document.createElement('input');
                             checkbox.type = 'checkbox';
@@ -3901,6 +3912,7 @@
                             resultItem.appendChild(checkbox);
                             resultItem.appendChild(info);
                             resultsList.appendChild(resultItem);
+                            return resultItem;
                         }
                         
                         async function testOne(target) {
@@ -3934,6 +3946,9 @@
                         testStatus.textContent = '${isFarsi ? 'تست کامل شد' : '测试完成'}: ' + completed + '/' + total;
                         startTestBtn.style.display = 'inline-block';
                         stopTestBtn.style.display = 'none';
+                        
+                        // 更新城市选择器
+                        updateCityFilter();
                     });
                 }
                 
@@ -3962,48 +3977,92 @@
                     });
                 }
                 
-                if (addSelectedBtn) {
-                    addSelectedBtn.addEventListener('click', async function() {
-                        const checkboxes = resultsList.querySelectorAll('input[type="checkbox"]:checked');
-                        if (checkboxes.length === 0) {
-                            showStatus('${isFarsi ? 'لطفا حداقل یک مورد انتخاب کنید' : '请至少选择一项'}', 'error');
-                            return;
+                // 获取选中项的通用函数
+                function getSelectedItems() {
+                    const checkboxes = resultsList.querySelectorAll('input[type="checkbox"]:checked');
+                    if (checkboxes.length === 0) {
+                        showStatus('${isFarsi ? 'لطفا حداقل یک مورد انتخاب کنید' : '请至少选择一项'}', 'error');
+                        return null;
+                    }
+                    
+                    const selectedItems = [];
+                    checkboxes.forEach(cb => {
+                        const idx = parseInt(cb.dataset.index);
+                        const result = testResults[idx];
+                        if (result && result.success) {
+                            const coloName = result.colo ? getColoName(result.colo) : result.nodeName;
+                            const itemStr = result.host + ':' + result.port + '#' + coloName;
+                            selectedItems.push(itemStr);
                         }
+                    });
+                    
+                    return selectedItems;
+                }
+                
+                // 覆盖添加
+                if (overwriteSelectedBtn) {
+                    overwriteSelectedBtn.addEventListener('click', async function() {
+                        const selectedItems = getSelectedItems();
+                        if (!selectedItems || selectedItems.length === 0) return;
                         
-                        const selectedItems = [];
-                        checkboxes.forEach(cb => {
-                            const idx = parseInt(cb.dataset.index);
-                            const result = testResults[idx];
-                            if (result && result.success) {
-                                const coloName = result.colo ? getColoName(result.colo) : result.nodeName;
-                                const itemStr = result.host + ':' + result.port + '#' + coloName;
-                                selectedItems.push(itemStr);
-                            }
-                        });
+                        const yxInput = document.getElementById('yx');
+                        const newValue = selectedItems.join(',');
+                        yxInput.value = newValue;
                         
-                        if (selectedItems.length > 0) {
-                            const yxInput = document.getElementById('yx');
-                            const newValue = selectedItems.join(',');
-                            yxInput.value = newValue;
-                            
-                            addSelectedBtn.disabled = true;
-                            addSelectedBtn.textContent = '${isFarsi ? 'در حال ذخیره...' : '保存中...'}';
-                            
-                            try {
-                                const configData = {
-                                    customIP: document.getElementById('customIP').value,
-                                    yx: newValue,
-                                    yxURL: document.getElementById('yxURL').value,
-                                    socksConfig: document.getElementById('socksConfig').value
-                                };
-                                await saveConfig(configData);
-                                showStatus('${isFarsi ? 'موفقیت‌آمیز بود' : '已替换'} ' + selectedItems.length + ' ${isFarsi ? 'مورد و ذخیره شد' : '项并已保存'}', 'success');
-                            } catch (err) {
-                                showStatus('${isFarsi ? 'خطا در ذخیره' : '保存失败'}: ' + err.message, 'error');
-                            } finally {
-                                addSelectedBtn.disabled = false;
-                                addSelectedBtn.textContent = '✓ ${isFarsi ? 'افزودن انتخاب‌شده‌ها به لیست ترجیحی' : '添加选中项到优选列表'}';
-                            }
+                        overwriteSelectedBtn.disabled = true;
+                        appendSelectedBtn.disabled = true;
+                        overwriteSelectedBtn.textContent = '${isFarsi ? 'در حال ذخیره...' : '保存中...'}';
+                        
+                        try {
+                            const configData = {
+                                customIP: document.getElementById('customIP').value,
+                                yx: newValue,
+                                yxURL: document.getElementById('yxURL').value,
+                                socksConfig: document.getElementById('socksConfig').value
+                            };
+                            await saveConfig(configData);
+                            showStatus('${isFarsi ? 'موفقیت‌آمیز بود' : '已覆盖'} ' + selectedItems.length + ' ${isFarsi ? 'مورد و ذخیره شد' : '项并已保存'}', 'success');
+                        } catch (err) {
+                            showStatus('${isFarsi ? 'خطا در ذخیره' : '保存失败'}: ' + err.message, 'error');
+                        } finally {
+                            overwriteSelectedBtn.disabled = false;
+                            appendSelectedBtn.disabled = false;
+                            overwriteSelectedBtn.textContent = '${isFarsi ? '覆盖添加' : '覆盖添加'}';
+                        }
+                    });
+                }
+                
+                // 追加添加
+                if (appendSelectedBtn) {
+                    appendSelectedBtn.addEventListener('click', async function() {
+                        const selectedItems = getSelectedItems();
+                        if (!selectedItems || selectedItems.length === 0) return;
+                        
+                        const yxInput = document.getElementById('yx');
+                        const currentValue = yxInput.value.trim();
+                        const newItems = selectedItems.join(',');
+                        const newValue = currentValue ? (currentValue + ',' + newItems) : newItems;
+                        yxInput.value = newValue;
+                        
+                        overwriteSelectedBtn.disabled = true;
+                        appendSelectedBtn.disabled = true;
+                        appendSelectedBtn.textContent = '${isFarsi ? 'در حال ذخیره...' : '保存中...'}';
+                        
+                        try {
+                            const configData = {
+                                customIP: document.getElementById('customIP').value,
+                                yx: newValue,
+                                yxURL: document.getElementById('yxURL').value,
+                                socksConfig: document.getElementById('socksConfig').value
+                            };
+                            await saveConfig(configData);
+                            showStatus('${isFarsi ? 'موفقیت‌آمیز بود' : '已追加'} ' + selectedItems.length + ' ${isFarsi ? 'مورد و ذخیره شد' : '项并已保存'}', 'success');
+                        } catch (err) {
+                            showStatus('${isFarsi ? 'خطا در ذخیره' : '保存失败'}: ' + err.message, 'error');
+                        } finally {
+                            overwriteSelectedBtn.disabled = false;
+                            appendSelectedBtn.disabled = false;
+                            appendSelectedBtn.textContent = '${isFarsi ? '追加添加' : '追加添加'}';
                         }
                     });
                 }
@@ -4079,6 +4138,136 @@
                 
                 function getColoName(colo) {
                     return coloMap[colo] || colo;
+                }
+                
+                // 城市筛选相关函数
+                const cityFilterContainer = document.getElementById('cityFilterContainer');
+                const cityCheckboxesContainer = document.getElementById('cityCheckboxesContainer');
+                
+                function updateCityFilter() {
+                    if (!cityFilterContainer || !cityCheckboxesContainer) return;
+                    
+                    // 从测试结果中提取所有可用的城市
+                    const cityMap = new Map();
+                    testResults.forEach((result, index) => {
+                        if (result.success && result.colo) {
+                            const colo = result.colo;
+                            if (!cityMap.has(colo)) {
+                                cityMap.set(colo, {
+                                    colo: colo,
+                                    name: getColoName(colo),
+                                    count: 0
+                                });
+                            }
+                            cityMap.get(colo).count++;
+                        }
+                    });
+                    
+                    if (cityMap.size === 0) {
+                        cityFilterContainer.style.display = 'none';
+                        return;
+                    }
+                    
+                    cityFilterContainer.style.display = 'block';
+                    cityCheckboxesContainer.innerHTML = '';
+                    
+                    // 按城市名称排序
+                    const cities = Array.from(cityMap.values()).sort((a, b) => a.name.localeCompare(b.name));
+                    
+                    cities.forEach(city => {
+                        const label = document.createElement('label');
+                        label.style.cssText = 'display: inline-flex; align-items: center; cursor: pointer; color: #00ff00; font-size: 0.85rem; padding: 4px 8px; background: rgba(0, 40, 0, 0.4); border: 1px solid #00aa00; border-radius: 4px;';
+                        
+                        const checkbox = document.createElement('input');
+                        checkbox.type = 'checkbox';
+                        checkbox.value = city.colo;
+                        checkbox.checked = true;
+                        checkbox.dataset.colo = city.colo;
+                        checkbox.style.cssText = 'margin-right: 6px; width: 16px; height: 16px; cursor: pointer;';
+                        
+                        const span = document.createElement('span');
+                        span.textContent = city.name + ' (' + city.count + ')';
+                        
+                        label.appendChild(checkbox);
+                        label.appendChild(span);
+                        cityCheckboxesContainer.appendChild(label);
+                        
+                        checkbox.addEventListener('change', filterResultsByCity);
+                    });
+                    
+                    // 监听筛选模式变化
+                    const filterModeRadios = document.querySelectorAll('input[name="cityFilterMode"]');
+                    filterModeRadios.forEach(radio => {
+                        radio.addEventListener('change', function() {
+                            if (this.value === 'all') {
+                                // 切换到"全部城市"模式时，自动选中所有城市复选框
+                                const cityCheckboxes = cityCheckboxesContainer.querySelectorAll('input[type="checkbox"]');
+                                cityCheckboxes.forEach(cb => {
+                                    cb.checked = true;
+                                    cb.disabled = false;
+                                });
+                            }
+                            filterResultsByCity();
+                        });
+                    });
+                }
+                
+                function filterResultsByCity() {
+                    if (!resultsList || !cityCheckboxesContainer) return;
+                    
+                    const filterMode = document.querySelector('input[name="cityFilterMode"]:checked')?.value || 'all';
+                    const resultItems = resultsList.querySelectorAll('[data-index]');
+                    const cityCheckboxes = cityCheckboxesContainer.querySelectorAll('input[type="checkbox"]');
+                    
+                    if (filterMode === 'fastest10') {
+                        // 只选择最快的10个
+                        const sortedResults = testResults
+                            .map((result, index) => ({ result, index }))
+                            .filter(item => item.result.success)
+                            .sort((a, b) => a.result.latency - b.result.latency)
+                            .slice(0, 10);
+                        
+                        const fastestIndices = new Set(sortedResults.map(item => item.index));
+                        
+                        resultItems.forEach(item => {
+                            const index = parseInt(item.dataset.index);
+                            const checkbox = item.querySelector('input[type="checkbox"]');
+                            if (fastestIndices.has(index)) {
+                                item.style.display = 'flex';
+                                if (checkbox) checkbox.checked = true;
+                            } else {
+                                item.style.display = 'none';
+                                if (checkbox) checkbox.checked = false;
+                            }
+                        });
+                        
+                        // 禁用城市复选框
+                        cityCheckboxes.forEach(cb => cb.disabled = true);
+                    } else {
+                        // 根据选中的城市筛选
+                        const selectedCities = new Set();
+                        cityCheckboxes.forEach(cb => {
+                            if (cb.checked) {
+                                selectedCities.add(cb.value);
+                            }
+                        });
+                        
+                        // 如果所有城市都被选中（或没有选中任何城市），显示所有结果
+                        const allChecked = cityCheckboxes.length > 0 && selectedCities.size === cityCheckboxes.length;
+                        const noneChecked = selectedCities.size === 0;
+                        
+                        resultItems.forEach(item => {
+                            const colo = item.dataset.colo || '';
+                            if (allChecked || noneChecked || selectedCities.has(colo)) {
+                                item.style.display = 'flex';
+                            } else {
+                                item.style.display = 'none';
+                            }
+                        });
+                        
+                        // 启用城市复选框
+                        cityCheckboxes.forEach(cb => cb.disabled = false);
+                    }
                 }
                 
                 async function testLatency(host, port, signal) {

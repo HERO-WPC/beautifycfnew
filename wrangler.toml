@@ -1,0 +1,7 @@
+name = "my-proxy-worker"
+main = "明文源吗byblog.js"
+compatibility_date = "2024-01-01"
+
+[[kv_namespaces]]
+binding = "C"
+id = "any-id-works-locally"
