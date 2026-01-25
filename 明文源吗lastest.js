@@ -1,5 +1,6 @@
+    // CFnew - 终端 v2.9.3
+    // 版本: v2.9.3
     import { connect } from 'cloudflare:sockets';
-
     let at = '351c9981-04b6-4103-aa4b-864aa9c91469';
     let fallbackAddress = '';
     let socks5Config = '';
@@ -18,7 +19,13 @@
     let ev = true;   
     let et = false; 
     let ex = false;  
-    let tp = '';  
+    let tp = '';
+    // 启用ECH功能（true启用，false禁用）
+    let enableECH = false;  
+    // 自定义DNS服务器（默认：https://dns.joeyblog.eu.org/joeyblog）
+    let customDNS = 'https://dns.joeyblog.eu.org/joeyblog';
+    // 自定义ECH域名（默认：cloudflare-ech.com）
+    let customECHDomain = 'cloudflare-ech.com';
 
     let scu = 'https://url.v1.mk/sub';  
     // 远程配置URL（硬编码）
@@ -433,6 +440,33 @@
                 const githubIPsControl = getConfigValue('egi', env.egi);
                 if (githubIPsControl !== undefined && githubIPsControl !== '') {
                     egi = githubIPsControl !== 'no' && githubIPsControl !== false && githubIPsControl !== 'false';
+                }
+                
+                const echControl = getConfigValue('ech', env.ech);
+                if (echControl !== undefined && echControl !== '') {
+                    enableECH = echControl === 'yes' || echControl === true || echControl === 'true';
+                }
+                
+                // 加载自定义DNS和ECH域名配置
+                const customDNSValue = getConfigValue('customDNS', '');
+                if (customDNSValue && customDNSValue.trim()) {
+                    customDNS = customDNSValue.trim();
+                }
+                
+                const customECHDomainValue = getConfigValue('customECHDomain', '');
+                if (customECHDomainValue && customECHDomainValue.trim()) {
+                    customECHDomain = customECHDomainValue.trim();
+                }
+                
+                // 如果启用了ECH，自动启用仅TLS模式（避免80端口干扰）
+                // ECH需要TLS才能工作，所以必须禁用非TLS节点
+                if (enableECH) {
+                    disableNonTLS = true;
+                    // 检查 KV 中是否有 dkby: yes，没有就直接写入
+                    const currentDkby = getConfigValue('dkby', '');
+                    if (currentDkby !== 'yes') {
+                        await setConfigValue('dkby', 'yes');
+                    }
                 }
                 
                 if (!ev && !et && !ex) {
@@ -978,6 +1012,330 @@
         return btoa(links.join('\n'));
     }
 
+    // 解析 VLESS/Trojan 链接并生成 Clash 节点配置
+    function parseLinkToClashNode(link) {
+        try {
+            // 解析 VLESS 链接
+            if (link.startsWith('vless://')) {
+                const url = new URL(link);
+                const name = decodeURIComponent(url.hash.substring(1));
+                const uuid = url.username;
+                const server = url.hostname;
+                const port = parseInt(url.port) || 443;
+                const params = new URLSearchParams(url.search);
+                
+                const tls = params.get('security') === 'tls' || params.get('tls') === 'true';
+                const network = params.get('type') || 'ws';
+                const path = params.get('path') || '/?ed=2048';
+                const host = params.get('host') || server;
+                const servername = params.get('sni') || host;
+                const alpn = params.get('alpn') || 'h3,h2,http/1.1';
+                const fingerprint = params.get('fp') || params.get('client-fingerprint') || 'chrome';
+                const ech = params.get('ech');
+                
+                const node = {
+                    name: name,
+                    type: 'vless',
+                    server: server,
+                    port: port,
+                    uuid: uuid,
+                    tls: tls,
+                    network: network,
+                    'client-fingerprint': fingerprint
+                };
+                
+                if (tls) {
+                    node.servername = servername;
+                    node.alpn = alpn.split(',').map(a => a.trim());
+                    node['skip-cert-verify'] = false;
+                }
+                
+                if (network === 'ws') {
+                    node['ws-opts'] = {
+                        path: path,
+                        headers: {
+                            Host: host
+                        }
+                    };
+                }
+                
+                if (ech) {
+                    const echDomain = customECHDomain || 'cloudflare-ech.com';
+                    node['ech-opts'] = {
+                        enable: true,
+                        'query-server-name': echDomain
+                    };
+                }
+                
+                return node;
+            }
+            
+            // 解析 Trojan 链接
+            if (link.startsWith('trojan://')) {
+                const url = new URL(link);
+                const name = decodeURIComponent(url.hash.substring(1));
+                const password = url.username;
+                const server = url.hostname;
+                const port = parseInt(url.port) || 443;
+                const params = new URLSearchParams(url.search);
+                
+                const network = params.get('type') || 'ws';
+                const path = params.get('path') || '/?ed=2048';
+                const host = params.get('host') || server;
+                const sni = params.get('sni') || host;
+                const alpn = params.get('alpn') || 'h3,h2,http/1.1';
+                const ech = params.get('ech');
+                
+                const node = {
+                    name: name,
+                    type: 'trojan',
+                    server: server,
+                    port: port,
+                    password: password,
+                    network: network,
+                    sni: sni,
+                    alpn: alpn.split(',').map(a => a.trim()),
+                    'skip-cert-verify': false
+                };
+                
+                if (network === 'ws') {
+                    node['ws-opts'] = {
+                        path: path,
+                        headers: {
+                            Host: host
+                        }
+                    };
+                }
+                
+                if (ech) {
+                    const echDomain = customECHDomain || 'cloudflare-ech.com';
+                    node['ech-opts'] = {
+                        enable: true,
+                        'query-server-name': echDomain
+                    };
+                }
+                
+                return node;
+            }
+        } catch (e) {
+            return null;
+        }
+        return null;
+    }
+
+    // 生成 Clash 配置
+    async function generateClashConfig(links, request, user) {
+        // 先通过订阅转换服务获取 Clash 配置
+        const subscriptionUrl = new URL(request.url);
+        subscriptionUrl.pathname = subscriptionUrl.pathname.replace(/\/sub$/, '') + '/sub';
+        subscriptionUrl.searchParams.set('target', 'base64');
+        const encodedUrl = encodeURIComponent(subscriptionUrl.toString());
+        const converterUrl = `${scu}?target=clash&url=${encodedUrl}&insert=false&emoji=true&list=false&xudp=false&udp=false&tfo=false&expand=true&scv=false&fdn=false&new_name=true`;
+        
+        try {
+            const response = await fetch(converterUrl);
+            if (!response.ok) {
+                throw new Error('订阅转换服务失败');
+            }
+            
+            let clashConfig = await response.text();
+            
+            // 如果 ECH 开启，为所有节点添加 ECH 参数
+            if (enableECH) {
+                // 处理单行格式的节点：  - {name: ..., server: ..., ...}
+                // 需要正确处理嵌套的花括号（如 ws-opts: {path: "...", headers: {Host: ...}}）
+                clashConfig = clashConfig.split('\n').map(line => {
+                    // 检查是否是节点行（以 "  - {" 开头，且包含 name: 和 server:）
+                    if (/^\s*-\s*\{/.test(line) && line.includes('name:') && line.includes('server:')) {
+                        // 检查是否已经有 ech-opts
+                        if (line.includes('ech-opts')) {
+                            return line; // 已有 ech-opts，不修改
+                        }
+                        // 找到最后一个 } 的位置（从右往左查找，处理嵌套花括号）
+                        const lastBraceIndex = line.lastIndexOf('}');
+                        if (lastBraceIndex > 0) {
+                            // 检查最后一个 } 之前是否有内容，确保格式正确
+                            const beforeBrace = line.substring(0, lastBraceIndex).trim();
+                            if (beforeBrace.length > 0) {
+                                // 在最后一个 } 之前添加 , ech-opts: {enable: true, query-server-name: ...}
+                                // 确保在逗号前有空格
+                                const echDomain = customECHDomain || 'cloudflare-ech.com';
+                                const needsComma = !beforeBrace.endsWith(',') && !beforeBrace.endsWith('{');
+                                return line.substring(0, lastBraceIndex) + (needsComma ? ', ' : ' ') + `ech-opts: {enable: true, query-server-name: ${echDomain}}` + line.substring(lastBraceIndex);
+                            }
+                        }
+                    }
+                    return line;
+                }).join('\n');
+                
+                // 处理多行格式的节点（如果存在）
+                // 只处理单行格式，多行格式由订阅转换服务处理，不需要额外修改
+                // 如果订阅转换服务返回多行格式，通常已经是正确的格式
+            }
+            
+            // 替换 DNS nameserver 为阿里的加密 DNS
+            clashConfig = clashConfig.replace(/^(\s*nameserver:\s*\n)((?:\s*-\s*[^\n]+\n)*)/m, (match, header, items) => {
+                // 替换所有 nameserver 项为阿里的加密 DNS
+                const dnsServer = customDNS || 'https://dns.joeyblog.eu.org/joeyblog';
+                return header + `    - ${dnsServer}\n`;
+            });
+            
+            return clashConfig;
+        } catch (e) {
+            // 如果订阅转换失败，返回错误
+            throw new Error('无法获取 Clash 配置: ' + e.message);
+        }
+    }
+
+    // 全局变量存储ECH调试信息
+    let echDebugInfo = '';
+    
+    async function fetchECHConfig(domain) {
+        if (!enableECH) {
+            echDebugInfo = 'ECH功能已禁用';
+            return null;
+        }
+        
+        echDebugInfo = '';
+        const debugSteps = [];
+        
+        try {
+            // 优先使用 Google DNS 查询 cloudflare-ech.com 的 ECH 配置
+            debugSteps.push('尝试使用 Google DNS 查询 cloudflare-ech.com...');
+            const echDomainUrl = `https://v.recipes/dns/dns.google/dns-query?name=cloudflare-ech.com&type=65`;
+            const echResponse = await fetch(echDomainUrl, {
+                headers: {
+                    'Accept': 'application/json'
+                }
+            });
+            
+            debugSteps.push(`Google DNS 响应状态: ${echResponse.status}`);
+            
+            if (echResponse.ok) {
+                const echData = await echResponse.json();
+                debugSteps.push(`Google DNS 返回数据: ${JSON.stringify(echData).substring(0, 200)}...`);
+                
+                if (echData.Answer && echData.Answer.length > 0) {
+                    debugSteps.push(`找到 ${echData.Answer.length} 条答案记录`);
+                    for (const answer of echData.Answer) {
+                        if (answer.data) {
+                            debugSteps.push(`解析答案数据: ${typeof answer.data}, 长度: ${String(answer.data).length}`);
+                            // Google DNS 返回的数据格式可能不同，需要解析
+                            const dataStr = typeof answer.data === 'string' ? answer.data : JSON.stringify(answer.data);
+                            const echMatch = dataStr.match(/ech=([^\s"']+)/);
+                            if (echMatch && echMatch[1]) {
+                                echDebugInfo = debugSteps.join('\\n') + '\\n✅ 成功从 Google DNS 获取 ECH 配置';
+                                return echMatch[1];
+                            }
+                            // 如果没有找到，尝试直接使用 data（可能是 base64 编码的）
+                            if (answer.data && !dataStr.includes('ech=')) {
+                                try {
+                                    const decoded = atob(answer.data);
+                                    debugSteps.push(`尝试 base64 解码，解码后长度: ${decoded.length}`);
+                                    const decodedMatch = decoded.match(/ech=([^\s"']+)/);
+                                    if (decodedMatch && decodedMatch[1]) {
+                                        echDebugInfo = debugSteps.join('\\n') + '\\n✅ 成功从 Google DNS (base64解码) 获取 ECH 配置';
+                                        return decodedMatch[1];
+                                    }
+                                } catch (e) {
+                                    debugSteps.push(`base64 解码失败: ${e.message}`);
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    debugSteps.push('Google DNS 未返回答案记录');
+                }
+            } else {
+                debugSteps.push(`Google DNS 请求失败: ${echResponse.status}`);
+            }
+            
+            // 如果 cloudflare-ech.com 查询失败，尝试使用 Google DNS 查询目标域名的 HTTPS 记录
+            debugSteps.push(`尝试使用 Google DNS 查询目标域名 ${domain}...`);
+            const dohUrl = `https://v.recipes/dns/dns.google/dns-query?name=${encodeURIComponent(domain)}&type=65`;
+            const response = await fetch(dohUrl, {
+                headers: {
+                    'Accept': 'application/json'
+                }
+            });
+            
+            debugSteps.push(`Google DNS (目标域名) 响应状态: ${response.status}`);
+            
+            if (response.ok) {
+                const data = await response.json();
+                debugSteps.push(`Google DNS (目标域名) 返回数据: ${JSON.stringify(data).substring(0, 200)}...`);
+                
+                if (data.Answer && data.Answer.length > 0) {
+                    debugSteps.push(`找到 ${data.Answer.length} 条答案记录`);
+                    for (const answer of data.Answer) {
+                        if (answer.data) {
+                            const dataStr = typeof answer.data === 'string' ? answer.data : JSON.stringify(answer.data);
+                            const echMatch = dataStr.match(/ech=([^\s"']+)/);
+                            if (echMatch && echMatch[1]) {
+                                echDebugInfo = debugSteps.join('\\n') + '\\n✅ 成功从 Google DNS (目标域名) 获取 ECH 配置';
+                                return echMatch[1];
+                            }
+                            // 尝试 base64 解码
+                            try {
+                                const decoded = atob(answer.data);
+                                const decodedMatch = decoded.match(/ech=([^\s"']+)/);
+                                if (decodedMatch && decodedMatch[1]) {
+                                    echDebugInfo = debugSteps.join('\\n') + '\\n✅ 成功从 Google DNS (目标域名, base64解码) 获取 ECH 配置';
+                                    return decodedMatch[1];
+                                }
+                            } catch (e) {
+                                debugSteps.push(`base64 解码失败: ${e.message}`);
+                            }
+                        }
+                    }
+                } else {
+                    debugSteps.push('Google DNS (目标域名) 未返回答案记录');
+                }
+            } else {
+                debugSteps.push(`Google DNS (目标域名) 请求失败: ${response.status}`);
+            }
+            
+            // 如果 Google DNS 失败，尝试使用 Cloudflare DNS 作为备选
+            debugSteps.push('尝试使用 Cloudflare DNS 作为备选...');
+            const cfEchUrl = `https://cloudflare-dns.com/dns-query?name=cloudflare-ech.com&type=65`;
+            const cfResponse = await fetch(cfEchUrl, {
+                headers: {
+                    'Accept': 'application/dns-json'
+                }
+            });
+            
+            debugSteps.push(`Cloudflare DNS 响应状态: ${cfResponse.status}`);
+            
+            if (cfResponse.ok) {
+                const cfData = await cfResponse.json();
+                debugSteps.push(`Cloudflare DNS 返回数据: ${JSON.stringify(cfData).substring(0, 200)}...`);
+                
+                if (cfData.Answer && cfData.Answer.length > 0) {
+                    debugSteps.push(`找到 ${cfData.Answer.length} 条答案记录`);
+                    for (const answer of cfData.Answer) {
+                        if (answer.data) {
+                            const echMatch = answer.data.match(/ech=([^\s"']+)/);
+                            if (echMatch && echMatch[1]) {
+                                echDebugInfo = debugSteps.join('\\n') + '\\n✅ 成功从 Cloudflare DNS 获取 ECH 配置';
+                                return echMatch[1];
+                            }
+                        }
+                    }
+                } else {
+                    debugSteps.push('Cloudflare DNS 未返回答案记录');
+                }
+            } else {
+                debugSteps.push(`Cloudflare DNS 请求失败: ${cfResponse.status}`);
+            }
+            
+            echDebugInfo = debugSteps.join('\\n') + '\\n❌ 所有DNS查询均失败，未获取到ECH配置';
+            return null;
+        } catch (error) {
+            echDebugInfo = debugSteps.join('\\n') + '\\n❌ 获取ECH配置时发生错误: ' + error.message;
+            return null;
+        }
+    }
+
     async function handleSubscriptionRequest(request, user, url = null) {
         if (!url) url = new URL(request.url);
         
@@ -985,15 +1343,23 @@
         const workerDomain = url.hostname;
         const target = url.searchParams.get('target') || 'base64';
 
+        // 如果启用了ECH，使用自定义值
+        let echConfig = null;
+        if (enableECH) {
+            const dnsServer = customDNS || 'https://dns.joeyblog.eu.org/joeyblog';
+            const echDomain = customECHDomain || 'cloudflare-ech.com';
+            echConfig = `${echDomain}+${dnsServer}`;
+        }
+
         async function addNodesFromList(list) {
             if (ev) {
-                finalLinks.push(...generateLinksFromSource(list, user, workerDomain));
+                finalLinks.push(...generateLinksFromSource(list, user, workerDomain, echConfig));
             }
             if (et) {
-                finalLinks.push(...await generateTrojanLinksFromSource(list, user, workerDomain));
+                finalLinks.push(...await generateTrojanLinksFromSource(list, user, workerDomain, echConfig));
             }
             if (ex) {
-                finalLinks.push(...generateXhttpLinksFromSource(list, user, workerDomain));
+                finalLinks.push(...generateXhttpLinksFromSource(list, user, workerDomain, echConfig));
             }
         }
 
@@ -1070,10 +1436,10 @@
                 const newIPList = await fetchAndParseNewIPs();
                 if (newIPList.length > 0) {
                         if (ev) {
-                    finalLinks.push(...generateLinksFromNewIPs(newIPList, user, workerDomain));
+                    finalLinks.push(...generateLinksFromNewIPs(newIPList, user, workerDomain, echConfig));
                         }
                         if (et) {
-                            finalLinks.push(...await generateTrojanLinksFromNewIPs(newIPList, user, workerDomain));
+                            finalLinks.push(...await generateTrojanLinksFromNewIPs(newIPList, user, workerDomain, echConfig));
                         }
                 }
             } catch (error) {
@@ -1105,7 +1471,7 @@
         switch (target.toLowerCase()) {
             case atob('Y2xhc2g='):
             case atob('Y2xhc2hy'):
-                subscriptionContent = await generateClashConfig(finalLinks);
+                subscriptionContent = await generateClashConfig(finalLinks, request, user);
                 contentType = 'text/yaml; charset=utf-8';
                 break;
             case atob('c3VyZ2U='):
@@ -1133,15 +1499,25 @@
                 subscriptionContent = btoa(finalLinks.join('\n'));
         }
         
+        const responseHeaders = { 
+            'Content-Type': contentType,
+            'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+        };
+        
+        // 添加ECH状态到响应头
+        if (enableECH) {
+            responseHeaders['X-ECH-Status'] = 'ENABLED';
+            if (echConfig) {
+                responseHeaders['X-ECH-Config-Length'] = String(echConfig.length);
+            }
+        }
+        
         return new Response(subscriptionContent, {
-            headers: { 
-                'Content-Type': contentType,
-                'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
-            },
+            headers: responseHeaders,
         });
     }
 
-    function generateLinksFromSource(list, user, workerDomain) {
+    function generateLinksFromSource(list, user, workerDomain, echConfig = null) {
         
         const CF_HTTP_PORTS = [80, 8080, 8880, 2052, 2082, 2086, 2095];
         const CF_HTTPS_PORTS = [443, 2053, 2083, 2087, 2096, 8443];
@@ -1195,11 +1571,20 @@
                         encryption: 'none', 
                         security: 'tls', 
                         sni: workerDomain, 
-                        fp: 'chrome', 
+                        fp: enableECH ? 'chrome' : 'randomized',
                         type: 'ws', 
                         host: workerDomain, 
                         path: wsPath
                     });
+                    
+                    // 如果启用了ECH，添加ech参数（ECH需要伪装成Chrome浏览器）
+                    if (enableECH) {
+                        const dnsServer = customDNS || 'https://dns.joeyblog.eu.org/joeyblog';
+                        const echDomain = customECHDomain || 'cloudflare-ech.com';
+                        wsParams.set('alpn', 'h3,h2,http/1.1');
+                        wsParams.set('ech', `${echDomain}+${dnsServer}`);
+                    }
+                    
                     links.push(`${proto}://${user}@${safeIP}:${port}?${wsParams.toString()}#${encodeURIComponent(wsNodeName)}`);
                 } else {
                     
@@ -1218,7 +1603,7 @@
         return links;
     }
 
-    async function generateTrojanLinksFromSource(list, user, workerDomain) {
+    async function generateTrojanLinksFromSource(list, user, workerDomain, echConfig = null) {
         
         const CF_HTTP_PORTS = [80, 8080, 8880, 2052, 2082, 2086, 2095];
         const CF_HTTPS_PORTS = [443, 2053, 2083, 2087, 2096, 8443];
@@ -1267,11 +1652,20 @@
                     const wsParams = new URLSearchParams({ 
                         security: 'tls', 
                         sni: workerDomain, 
-                        fp: 'chrome', 
+                        fp: 'chrome',
                         type: 'ws', 
                         host: workerDomain, 
                         path: wsPath
                     });
+                    
+                    // 如果启用了ECH，添加ech参数（ECH需要伪装成Chrome浏览器）
+                    if (enableECH) {
+                        const dnsServer = customDNS || 'https://dns.joeyblog.eu.org/joeyblog';
+                        const echDomain = customECHDomain || 'cloudflare-ech.com';
+                        wsParams.set('alpn', 'h3,h2,http/1.1');
+                        wsParams.set('ech', `${echDomain}+${dnsServer}`);
+                    }
+                    
                     links.push(`${atob('dHJvamFuOi8v')}${password}@${safeIP}:${port}?${wsParams.toString()}#${encodeURIComponent(wsNodeName)}`);
                 } else {
                     
@@ -1743,6 +2137,14 @@
                     trojanPasswordPlaceholder: '留空则自动使用 UUID',
                     trojanPasswordHint: '设置自定义 Trojan 密码。留空则使用 UUID。客户端会自动对密码进行 SHA224 哈希。',
                     protocolHint: '可以同时启用多个协议。订阅将生成选中协议的节点。<br>• VLESS WS: 基于 WebSocket 的标准协议<br>• Trojan: 使用 SHA224 密码认证<br>• xhttp: 基于 HTTP POST 的伪装协议（需要绑定自定义域名并开启 gRPC）',
+                    enableECH: '启用 ECH (Encrypted Client Hello)',
+                    enableECHHint: '启用后，每次刷新订阅时会自动从 DoH 获取最新的 ECH 配置并添加到链接中',
+                    customDNS: '自定义 DNS 服务器',
+                    customDNSPlaceholder: '例如: https://dns.joeyblog.eu.org/joeyblog',
+                    customDNSHint: '用于ECH配置查询的DNS服务器地址（DoH格式）',
+                    customECHDomain: '自定义 ECH 域名',
+                    customECHDomainPlaceholder: '例如: cloudflare-ech.com',
+                    customECHDomainHint: 'ECH配置中使用的域名，留空则使用默认值',
                     saveProtocol: '保存协议配置',
                     subscriptionConverterPlaceholder: '默认: https://url.v1.mk/sub',
                     subscriptionConverterHint: '自定义订阅转换API地址，留空则使用默认地址',
@@ -1767,7 +2169,7 @@
                         KR: '🇰🇷 韩国', DE: '🇩🇪 德国', SE: '🇸🇪 瑞典', NL: '🇳🇱 荷兰',
                         FI: '🇫🇮 芬兰', GB: '🇬🇧 英国'
                     },
-                    terminal: '终端 v2.9',
+                    terminal: '终端 v2.9.3',
                     githubProject: 'GitHub 项目',
                     autoDetectClient: '自动识别',
                 selectionLogicText: '同地区 → 邻近地区 → 其他地区',
@@ -1819,6 +2221,14 @@
                     enableVLESS: 'فعال‌سازی پروتکل VLESS',
                     enableTrojan: 'فعال‌سازی پروتکل Trojan',
                     enableXhttp: 'فعال‌سازی پروتکل xhttp',
+                    enableECH: 'فعال‌سازی ECH (Encrypted Client Hello)',
+                    enableECHHint: 'پس از فعال‌سازی، در هر بار تازه‌سازی اشتراک، پیکربندی ECH به‌روز به‌طور خودکار از DoH دریافت شده و به لینک‌ها اضافه می‌شود',
+                    customDNS: 'سرور DNS سفارشی',
+                    customDNSPlaceholder: 'مثال: https://dns.joeyblog.eu.org/joeyblog',
+                    customDNSHint: 'آدرس سرور DNS برای جستجوی پیکربندی ECH (فرمت DoH)',
+                    customECHDomain: 'دامنه ECH سفارشی',
+                    customECHDomainPlaceholder: 'مثال: cloudflare-ech.com',
+                    customECHDomainHint: 'دامنه استفاده شده در پیکربندی ECH، خالی بگذارید تا از مقدار پیش‌فرض استفاده شود',
                     trojanPassword: 'رمز عبور Trojan (اختیاری):',
                     customPath: 'مسیر سفارشی (d):',
                     customIP: 'ProxyIP سفارشی (p):',
@@ -1898,7 +2308,7 @@
                         KR: '🇰🇷 کره جنوبی', DE: '🇩🇪 آلمان', SE: '🇸🇪 سوئد', NL: '🇳🇱 هلند',
                         FI: '🇫🇮 فنلاند', GB: '🇬🇧 بریتانیا'
                     },
-                    terminal: 'ترمینال v2.9',
+                    terminal: 'ترمینال v2.9.3',
                     githubProject: 'پروژه GitHub',
                     autoDetectClient: 'تشخیص خودکار',
                 selectionLogicText: 'هم‌منطقه → منطقه مجاور → سایر مناطق',
@@ -1931,7 +2341,7 @@
             const t = translations[isFarsi ? 'fa' : 'zh'];
         
         const pageHtml = `<!DOCTYPE html>
-        <html lang="${langAttr}" dir="${isFarsi ? 'rtl' : 'ltr'}">
+         <html lang="${langAttr}" dir="${isFarsi ? 'rtl' : 'ltr'}">
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -1941,119 +2351,107 @@
     
         /* 1. 定义现代色调 */
     :root {
-        --primary: #6366f1; /* 主色调：紫色 */
-        --bg: #0f172a;      /* 背景色：深蓝 */
-        --card: #1e293b;    /* 卡片背景色：更深的蓝 */
-        --text: #f8fafc;    /* 主要文字色：近白色 */
-        --accent: #22d3ee;  /* 强调色：青蓝色 */
-        --border: rgba(255, 255, 255, 0.08); /* 边框色：半透明白 */
-        --transparent-card-bg: rgba(15, 23, 42, 0.7); /* 深度透明卡片背景 */
-        --transparent-border: rgba(255, 255, 255, 0.1); /* 深度透明边框 */
-        --input-bg: rgba(0, 0, 0, 0.2); /* 输入框背景 */
-        --input-border: rgba(255, 255, 255, 0.1); /* 输入框边框 */
-        --override-border-color: rgba(99, 102, 241, 0.4); /* 强制覆盖边框色 */
-        --override-text-color: #22d3ee; /* 强制覆盖文字色 */
-        --hint-text-color: #cbd5e1; /* 提示文字色 */
+        --primary: #6366f1;
+        --bg: #0f172a;
+        --card: #1e293b;
+        --text: #f8fafc;
+        --accent: #22d3ee;
+        --border: rgba(255, 255, 255, 0.08);
     }
 
     /* 2. 基础布局重置 - 彻底去绿 */
     body {
-        /* 隐藏所有 matrix 相关的元素 */
         .matrix-bg, .matrix-rain, .matrix-code-rain, #matrixCodeRain, .matrix-text {
-            display: none !important;
-        }
-        /* 背景图片和渐变叠加 */
+        display: none !important;
+    }
+    /* 在这里替换你的图片地址 */
         background: linear-gradient(rgba(15, 23, 42, 0.8), rgba(15, 23, 42, 0.8)), 
-                    url('https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=2072&auto=format&fit=crop');
-        background-size: cover;
-        background-position: center center;
-        background-attachment: fixed;
+                    url('https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=2072&auto=format&fit=crop') !important;
         
-        color: var(--text); /* 使用变量定义主要文字颜色 */
-        font-family: 'Segoe UI', system-ui, sans-serif;
+        background-size: cover !important;        /* 背景图全屏覆盖 */
+        background-position: center !important;    /* 图片居中 */
+        background-attachment: fixed !important;  /* 滚动时背景固定，很有高级感 */
+        
+        color: var(--text) !important;
+        font-family: 'Segoe UI', system-ui, sans-serif !important;
         margin: 0; padding: 0;
         min-height: 100vh;
     }
 
-    /* 极致透明卡片（电脑和手机通用） */
+/* 2. 极致透明卡片（电脑和手机通用） */
     .card {
-        background: var(--transparent-card-bg); /* 使用变量，更深透明度 */
-        backdrop-filter: blur(16px); /* 增加模糊度，提升视觉效果 */
-        -webkit-backdrop-filter: blur(16px);
-        border: 1px solid var(--transparent-border); /* 使用变量，更淡边框 */
-        border-radius: 16px;
-        padding: 25px;
-        box-shadow: 0 10px 25px -5px rgba(0,0,0,0.3);
-        margin-bottom: 0;
-        transition: all 0.3s ease; /* 添加过渡效果 */
+        /* 0.15 代表 15% 的底色，85% 都是透明的 */
+        background: rgba(15, 23, 42, 0.15) !important; 
+        
+        /* 毛玻璃模糊，建议保留 5px-8px，否则背景太花会导致文字看不清 */
+        backdrop-filter: blur(8px) !important;
+        -webkit-backdrop-filter: blur(8px) !important;
+        
+        /* 边框也调淡，不遮挡视线 */
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        
+        box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.2) !important;
     }
 
-    /* 让原本绿色的框也变透明 */
+    /* 3. 让原本绿色的框也变透明 */
     [style*="border: 1px solid #00ff00"], fieldset, #latencyResultsList {
-        background: rgba(0, 0, 0, 0.1);
-        border: 1px solid rgba(255, 255, 255, 0.1);
+        background: rgba(0, 0, 0, 0.1) !important;
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
     }
 
     /* 同时让输入框也带一点半透明，整体更统一 */
-    input[type="text"],
-    input[type="number"],
-    select {
-        width: 100%;
-        padding: 12px;
-        background: var(--input-bg); /* 使用变量 */
-        border: 1px solid var(--input-border); /* 使用变量 */
-        border-radius: 8px;
-        color: var(--text); /* 使用变量 */
-        margin: 10px 0;
-        outline: none;
-        backdrop-filter: blur(4px); /* 保持毛玻璃效果 */
+    input[type="text"], input[type="number"], select {
+        background: rgba(0, 0, 0, 0.2) !important;
+        backdrop-filter: blur(4px) !important;
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        color: white !important;
     }
-    /* 核心容器：强行改为左右双栏 */
+    /* 3. 核心容器：强行改为左右双栏 */
     .container {
-        max-width: 1200px;
-        margin: 0 auto;
-        padding: 30px;
-        display: grid;
-        grid-template-columns: 320px 1fr; /* 左栏固定，右栏自适应 */
-        gap: 25px;
+        max-width: 1200px !important;
+        margin: 0 auto !important;
+        padding: 30px !important;
+        display: grid !important;
+        grid-template-columns: 320px 1fr !important; /* 左栏固定，右栏自适应 */
+        gap: 25px !important;
     }
 
     /* 头部跨两栏 */
     .header {
-        grid-column: 1 / -1;
+        grid-column: 1 / -1 !important;
         border-bottom: 1px solid var(--border);
         padding-bottom: 20px;
         margin-bottom: 10px;
     }
-    .title { font-size: 2rem; font-weight: 800; color: #fff; text-shadow: none; }
+    .title { font-size: 2rem !important; font-weight: 800 !important; color: #fff !important; text-shadow: none !important; }
 
-    /* 卡片(Card)美化 - 把你那一堆内容包起来 */
+    /* 4. 卡片(Card)美化 - 把你那一堆内容包起来 */
     .card {
-        background: var(--card);
-        border: 1px solid var(--border);
-        border-radius: 16px;
-        padding: 25px;
-        box-shadow: 0 10px 25px -5px rgba(0,0,0,0.3);
-        margin-bottom: 0;
+        background: var(--card) !important;
+        border: 1px solid var(--border) !important;
+        border-radius: 16px !important;
+        padding: 25px !important;
+        box-shadow: 0 10px 25px -5px rgba(0,0,0,0.3) !important;
+        margin-bottom: 0 !important;
     }
 
     /* 重点：利用 Order 让原本在后面的“系统状态”跑到左边去 */
-    .card:nth-of-type(2) { grid-column: 1; grid-row: 2; height: fit-content; }
-    .card:nth-of-type(1) { grid-column: 2; grid-row: 2; }
-    #configCard { grid-column: 2; }
+    .card:nth-of-type(2) { grid-column: 1 !important; grid-row: 2 !important; height: fit-content; }
+    .card:nth-of-type(1) { grid-column: 2 !important; grid-row: 2 !important; }
+    #configCard { grid-column: 2 !important; }
 
-    /* 表单元素整齐美化 */
+    /* 5. 表单元素整齐美化 */
     input[type="text"], input[type="number"], select {
-        width: 100%;
-        padding: 12px;
-        background: rgba(0,0,0,0.2);
-        border: 1px solid var(--border);
-        border-radius: 8px;
-        color: #fff;
-        margin: 10px 0;
+        width: 100% !important;
+        padding: 12px !important;
+        background: rgba(0,0,0,0.2) !important;
+        border: 1px solid var(--border) !important;
+        border-radius: 8px !important;
+        color: #fff !important;
+        margin: 10px 0 !important;
         outline: none;
     }
-    input:focus { border-color: var(--primary); }
+    input:focus { border-color: var(--primary) !important; }
 
     /* 复选框排版 */
     .card label {
@@ -2061,266 +2459,281 @@
         margin: 12px 0; color: var(--accent); cursor: pointer;
     }
 
-    /* 按钮高级感 */
-    .client-btn,
-    .generate-btn,
-    button[type="submit"],
-    #startLatencyTest {
-        background: linear-gradient(135deg, var(--primary) 0%, #a855f7 100%); /* 渐变背景 */
-        color: white;
-        border: none;
-        padding: 12px 18px;
-        border-radius: 10px;
-        font-weight: 600;
-        cursor: pointer;
-        transition: 0.2s ease;
-        margin: 5px 0;
-        text-shadow: none;
+    /* 6. 按钮高级感 */
+    .client-btn, .generate-btn, button[type="submit"], #startLatencyTest {
+        background: var(--primary) !important;
+        color: white !important;
+        border: none !important;
+        padding: 12px 18px !important;
+        border-radius: 10px !important;
+        font-weight: 600 !important;
+        cursor: pointer !important;
+        transition: 0.2s ease !important;
+        margin: 5px 0 !important;
+        text-shadow: none !important;
     }
-    .client-btn:hover {
-        background: linear-gradient(135deg, #4f46e5 0%, #9333ea 100%); /* 悬停渐变 */
-        transform: translateY(-2px);
-    }
+    .client-btn:hover { background: #4f46e5 !important; transform: translateY(-2px); }
 
     /* 客户端选择器的网格化 */
     #clientButtons {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-        gap: 10px;
+        display: grid !important;
+        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)) !important;
+        gap: 10px !important;
     }
 
     /* 测速结果显示区 */
     #latencyResultsList {
-        background: #000;
-        padding: 15px;
-        border-radius: 10px;
-        font-family: 'Consolas', monospace;
-        font-size: 13px;
+        background: #000 !important;
+        padding: 15px !important;
+        border-radius: 10px !important;
+        font-family: 'Consolas', monospace !important;
+        font-size: 13px !important;
         line-height: 1.6;
     }
 
     /* 适配手机端 */
     @media (max-width: 900px) {
-        .container { grid-template-columns: 1fr; }
-        .card { grid-column: 1; }
+        .container { grid-template-columns: 1fr !important; }
+        .card { grid-column: 1 !important; }
     }
 
     /* 彻底消除残留绿色 */
-    #kvStatus, #regionStatus, #currentIP, #backupStatus, 
-    #latencyResultsList, .card div, .card p, span, h1, h2 {
-        color: #f8fafc; /* 统一改为白色文字 */
-        text-shadow: none; /* 去掉发光效果 */
+#kvStatus, #regionStatus, #currentIP, #backupStatus, 
+#latencyResultsList, .card div, .card p, span, h1, h2 {
+    color: #f8fafc !important; /* 统一改为白色文字 */
+    text-shadow: none !important; /* 去掉发光效果 */
+}
+
+/* 针对原本那个绿色的检测状态框 */
+div[style*="border: 1px solid #4f46e5"], 
+div[style*="border: 1px solid green"],
+.status-item, 
+#systemStatus div {
+    border: 1px solid rgba(255, 255, 255, 0.1) !important; /* 绿色边框变半透明白 */
+    background: rgba(0, 0, 0, 0.2) !important;
+    border-radius: 8px !important;
+}
+
+/* 按钮文字和图标颜色微调 */
+.client-btn, .btn-action {
+    color: #ffffff !important;
+}
+
+/* 针对图片中那个“检测中...”的绿色容器 */
+#systemStatus, #kvStatus {
+    border: 1px solid var(--primary) !important; /* 改为柔和的蓝色边缘 */
+    color: var(--accent) !important;
+}
+
+/* 隐藏所有带 matrix 类名的残留元素 */
+.matrix-text, .matrix-border, .matrix-rain {
+    display: none !important;
+}
+/* 1. 强行拦截所有带有绿色边框的行内样式 */
+div[style*="00ff00"], 
+div[style*="green"], 
+div[style*="lime"],
+fieldset {
+    border-color: rgba(99, 102, 241, 0.5) !important; /* 强制变蓝或半透明白 */
+    box-shadow: 0 0 10px rgba(99, 102, 241, 0.2) !important;
+}
+
+/* 2. 强行拦截所有带绿色文字的行内样式 */
+*[style*="color: #4f46e5"], 
+*[style*="color: green"], 
+*[style*="color: lime"],
+.status-text, 
+#kvStatus,
+#systemStatus b {
+    color: #22d3ee !important; /* 强制变青蓝色或白色 */
+    text-shadow: none !important;
+}
+
+/* 3. 针对延迟测试模块的那个大绿框 */
+#latencyResultsList, 
+div[id^="latency"] {
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    background: rgba(0, 0, 0, 0.3) !important;
+    color: #f8fafc !important;
+}
+
+/* 4. 针对那个绿色的“生成IP”和状态标签 */
+span[style*="background-color: #4f46e5"],
+.badge-green {
+    background-color: var(--primary) !important;
+    color: white !important;
+}
+
+/* 5. 修正输入框提示文字的颜色（图中那些暗绿色） */
+.card p, .card span, label {
+    color: #94a3b8 !important; /* 改为现代感十足的灰蓝色 */
+}
+/* --- 强力覆盖脚本硬编码的绿色 --- */
+
+/* 1. 强制拦截所有内联绿色边框 (id=00ff00) */
+[style*="border: 1px solid #4f46e5"], 
+[style*="border: 1px solid green"],
+.status-item, fieldset, #latencyResultsList {
+    border: 1px solid rgba(99, 102, 241, 0.4) !important; /* 统一改为半透明淡蓝 */
+    background: rgba(15, 23, 42, 0.5) !important;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2) !important;
+}
+
+/* 2. 强制拦截所有亮绿色文字 */
+[style*="color: #4f46e5"], 
+[style*="color: green"],
+.status-text, #kvStatus b, #systemStatus b {
+    color: #22d3ee !important; /* 统一改为电光青色 */
+    text-shadow: none !important;
+}
+
+/* 3. 输入框和提示文字美化 (去暗绿) */
+.card p, .card span, label, .help-text {
+    color: #cbd5e1 !important; /* 改为明亮的灰白色，方便阅读 */
+}
+
+/* 4. 延迟测试按钮和生成按钮 */
+button#startLatencyTest, button[onclick*="generate"] {
+    background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%) !important;
+    border: none !important;
+    color: white !important;
+}
+
+/* 5. 半透明卡片深度优化 */
+.card {
+    background: rgba(15, 23, 42, 0.7) !important;
+    backdrop-filter: blur(16px) !important;
+    -webkit-backdrop-filter: blur(16px) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    transition: all 0.3s ease;
+}
+
+/* 6. 修正顶部语言切换器的绿色阴影 */
+#languageSelector {
+    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+    background: rgba(0, 0, 0, 0.4) !important;
+}
+/* --- 彻底重塑选择框(Select)样式 --- */
+select {
+    /* 基础造型：深色半透明 */
+    background: rgba(15, 23, 42, 0.7) !important;
+    color: #22d3ee !important; /* 电光青文字 */
+    border: 1px solid rgba(99, 102, 241, 0.5) !important; /* 紫色边框 */
+    border-radius: 8px !important;
+    padding: 10px 15px !important;
+    font-size: 14px !important;
+    cursor: pointer !important;
+    
+    /* 去除原生外观 */
+    appearance: none !important;
+    -webkit-appearance: none !important;
+    -moz-appearance: none !important;
+    
+    /* 添加自定义下拉箭头 (一个白色小三角) */
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'%3E%3C/path%3E%3C/svg%3E") !important;
+    background-repeat: no-repeat !important;
+    background-position: right 15px center !important;
+    background-size: 12px !important;
+    padding-right: 40px !important;
+    
+    transition: all 0.3s ease !important;
+    outline: none !important;
+}
+
+/* 悬停时边框加亮 */
+select:hover {
+    border-color: #6366f1 !important;
+    background-color: rgba(30, 41, 59, 0.8) !important;
+    box-shadow: 0 0 10px rgba(99, 102, 241, 0.3) !important;
+}
+
+/* 重点：优化下拉列表(Option)的样式 (部分浏览器支持) */
+select option {
+    background-color: #1e293b !important; /* 深色背景 */
+    color: #ffffff !important;
+    padding: 10px !important;
+}
+
+/* 针对那个“指定地区”的特定标签美化 */
+label[for="wkRegion"], label {
+    font-weight: 600 !important;
+    color: #a855f7 !important; /* 紫色标题 */
+    margin-top: 15px !important;
+    display: block !important;
+}
+/* --- 手机端(移动端) 终极单列美化 --- */
+@media (max-width: 768px) {
+    /* 1. 强制所有容器为单列 */
+    .container {
+        display: block !important; /* 放弃 Grid，回归简单块布局 */
+        padding: 12px !important;
     }
 
-    /* 针对原本那个绿色的检测状态框 */
-    div[style*="border: 1px solid #4f46e5"], 
-    div[style*="border: 1px solid green"],
-    .status-item, 
-    #systemStatus div {
-        border: 1px solid rgba(255, 255, 255, 0.1); /* 绿色边框变半透明白 */
-        background: rgba(0, 0, 0, 0.2);
-        border-radius: 8px;
-    }
-
-    /* 按钮文字和图标颜色微调 */
-    .client-btn, .btn-action {
-        color: #ffffff;
-    }
-
-    /* 针对图片中那个“检测中...”的绿色容器 */
-    #systemStatus, #kvStatus {
-        border: 1px solid var(--primary); /* 改为柔和的蓝色边缘 */
-        color: var(--accent);
-    }
-
-    /* 隐藏所有带 matrix 类名的残留元素 */
-    .matrix-text, .matrix-border, .matrix-rain {
-        display: none;
-    }
-    /* 强行拦截所有带有绿色边框的行内样式 */
-    div[style*="00ff00"], 
-    div[style*="green"], 
-    div[style*="lime"],
-    fieldset {
-        border-color: rgba(99, 102, 241, 0.5); /* 强制变蓝或半透明白 */
-        box-shadow: 0 0 10px rgba(99, 102, 241, 0.2);
-    }
-
-    /* 强行拦截所有带绿色文字的行内样式 */
-    *[style*="color: #4f46e5"], 
-    *[style*="color: green"], 
-    *[style*="color: lime"],
-    .status-text, 
-    #kvStatus,
-    #systemStatus b {
-        color: #22d3ee; /* 强制变青蓝色或白色 */
-        text-shadow: none;
-    }
-
-    /* 针对延迟测试模块的那个大绿框 */
-    #latencyResultsList, 
-    div[id^="latency"] {
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        background: rgba(0, 0, 0, 0.3);
-        color: #f8fafc;
-    }
-
-    /* 针对那个绿色的“生成IP”和状态标签 */
-    span[style*="background-color: #4f46e5"],
-    .badge-green {
-        background-color: var(--primary);
-        color: white;
-    }
-
-    /* 修正输入框提示文字的颜色（图中那些暗绿色） */
-    .card p, .card span, label {
-        color: #94a3b8; /* 改为现代感十足的灰蓝色 */
-    }
-    /* --- 强力覆盖脚本硬编码的绿色 --- */
-
-    /* 强制拦截所有内联绿色边框 (id=00ff00) */
-    [style*="border: 1px solid #4f46e5"], 
-    [style*="border: 1px solid green"],
-    .status-item, fieldset, #latencyResultsList {
-        border: 1px solid rgba(99, 102, 241, 0.4); /* 统一改为半透明淡蓝 */
-        background: rgba(15, 23, 42, 0.5);
-        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
-    }
-
-    /* 强制拦截所有亮绿色文字 */
-    [style*="color: #4f46e5"], 
-    [style*="color: green"],
-    .status-text, #kvStatus b, #systemStatus b {
-        color: #22d3ee; /* 统一改为电光青色 */
-        text-shadow: none;
-    }
-
-    /* 输入框和提示文字美化 (去暗绿) */
-    .card p, .card span, label, .help-text {
-        color: #cbd5e1; /* 改为明亮的灰白色，方便阅读 */
-    }
-
-    /* 延迟测试按钮和生成按钮 */
-    button#startLatencyTest, button[onclick*="generate"] {
-        background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
-        border: none;
-        color: white;
-    }
-
-    /* 半透明卡片深度优化 */
+    /* 2. 让每一张卡片都撑满宽度，并增加间距 */
     .card {
-        background: rgba(15, 23, 42, 0.7);
-        backdrop-filter: blur(16px);
-        -webkit-backdrop-filter: blur(16px);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        transition: all 0.3s ease;
+        width: 100% !important;
+        margin: 0 0 20px 0 !important;
+        padding: 18px !important;
+        box-sizing: border-box !important;
+        grid-column: auto !important; /* 重置之前双栏的定位 */
+        grid-row: auto !important;
     }
 
-    /* 修正顶部语言切换器的绿色阴影 */
-    #languageSelector {
-        border: 1px solid rgba(255, 255, 255, 0.2);
-        background: rgba(0, 0, 0, 0.4);
+    /* 3. 按钮组也改为单列（或者两列自适应，防止太长） */
+    #clientButtons, .client-grid {
+        display: grid !important;
+        grid-template-columns: 1fr !important; /* 彻底单列 */
+        gap: 10px !important;
     }
-    /* --- 彻底重塑选择框(Select)样式 --- */
-    select {
-        /* 基础造型：深色半透明 */
-        background: rgba(15, 23, 42, 0.7);
-        color: #22d3ee; /* 电光青文字 */
-        border: 1px solid rgba(99, 102, 241, 0.5); /* 紫色边框 */
-        border-radius: 8px;
-        padding: 10px 15px;
-        font-size: 14px;
-        cursor: pointer;
+    
+    /* 如果单列按钮太占地方，可以维持 2 列 */
+    /* grid-template-columns: repeat(2, 1fr) !important; */
+
+    /* 4. 优化输入框触控：全宽且大字号 */
+    input[type="text"], input[type="number"], select {
+        width: 100% !important;
+        height: 48px !important; /* 增加高度方便点击 */
+        font-size: 16px !important; /* 解决 iOS 输入框自动缩放问题 */
+        margin: 8px 0 !important;
+    }
+
+    /* 5. 标题和状态栏居中，更符合手机审美 */
+    .header {
+        text-align: center !important;
+        margin-bottom: 20px !important;
+    }
+    
+    #systemStatus, #kvStatus {
+        font-size: 13px !important;
+        line-height: 1.6 !important;
+    }
+
+    /* 6. 隐藏不必要的桌面端装饰 */
+    .desktop-only {
+        display: none !important;
+    }
+}
+/* 2. 极致透明卡片（电脑和手机通用） */
+    .card {
+        /* 0.1 代表 10% 的底色，90% 都是透明的 */
+        background: rgba(15, 23, 42, 0.1) !important; 
         
-        /* 去除原生外观 */
-        appearance: none;
-        -webkit-appearance: none;
-        -moz-appearance: none;
+        /* 毛玻璃模糊，建议保留 5px-8px，否则背景太花会导致文字看不清 */
+        backdrop-filter: blur(4px) !important;
+        -webkit-backdrop-filter: blur(4px) !important;
         
-        /* 添加自定义下拉箭头 (一个白色小三角) */
-        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'%3E%3C/path%3E%3C/svg%3E");
-        background-repeat: no-repeat;
-        background-position: right 15px center;
-        background-size: 12px;
-        padding-right: 40px;
+        /* 边框也调淡，不遮挡视线 */
+        border: 1px solid rgba(255, 255, 255, 0) !important;
         
-        transition: all 0.3s ease;
-        outline: none;
+        box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.2) !important;
     }
 
-    /* 悬停时边框加亮 */
-    select:hover {
-        border-color: #6366f1;
-        background-color: rgba(30, 41, 59, 0.8);
-        box-shadow: 0 0 10px rgba(99, 102, 241, 0.3);
+    /* 3. 让原本绿色的框也变透明 */
+    [style*="border: 1px solid #00ff00"], fieldset, #latencyResultsList {
+        background: rgba(0, 0, 0, 0.1) !important;
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
     }
-
-    /* 重点：优化下拉列表(Option)的样式 (部分浏览器支持) */
-    select option {
-        background-color: #1e293b; /* 深色背景 */
-        color: #ffffff;
-        padding: 10px;
-    }
-
-    /* 针对那个“指定地区”的特定标签美化 */
-    label[for="wkRegion"], label {
-        font-weight: 600;
-        color: #a855f7; /* 紫色标题 */
-        margin-top: 15px;
-        display: block;
-    }
-    /* --- 手机端(移动端) 终极单列美化 --- */
-    @media (max-width: 768px) {
-        /* 强制所有容器为单列 */
-        .container {
-            display: block; /* 放弃 Grid，回归简单块布局 */
-            padding: 12px;
-        }
-
-        /* 让每一张卡片都撑满宽度，并增加间距 */
-        .card {
-            width: 100%;
-            margin: 0 0 20px 0;
-            padding: 18px;
-            box-sizing: border-box;
-            grid-column: auto; /* 重置之前双栏的定位 */
-            grid-row: auto;
-        }
-
-        /* 按钮组也改为单列（或者两列自适应，防止太长） */
-        #clientButtons, .client-grid {
-            display: grid;
-            grid-template-columns: 1fr; /* 彻底单列 */
-            gap: 10px;
-        }
-        
-        /* 如果单列按钮太占地方，可以维持 2 列 */
-        /* grid-template-columns: repeat(2, 1fr); */
-
-        /* 优化输入框触控：全宽且大字号 */
-        input[type="text"], input[type="number"], select {
-            width: 100%;
-            height: 48px; /* 增加高度方便点击 */
-            font-size: 16px; /* 解决 iOS 输入框自动缩放问题 */
-            margin: 8px 0;
-        }
-
-        /* 标题和状态栏居中，更符合手机审美 */
-        .header {
-            text-align: center;
-            margin-bottom: 20px;
-        }
-        
-        #systemStatus, #kvStatus {
-            font-size: 13px;
-            line-height: 1.6;
-        }
-
-        /* 隐藏不必要的桌面端装饰 */
-        .desktop-only {
-            display: none;
-        }
-    }
+</style>
     </head>
     <body>
         <div class="matrix-bg"></div>
@@ -2362,6 +2775,7 @@
                         <div id="geoInfo" style="margin: 8px 0; color: #00aa00; font-family: 'Courier New', monospace; font-size: 0.9rem; text-shadow: 0 0 3px #00aa00;">${t.detectionMethod}${t.checking}</div>
                         <div id="backupStatus" style="margin: 8px 0; color: #00ff00; font-family: 'Courier New', monospace; text-shadow: 0 0 3px #00ff00;">${t.proxyIPStatus}${t.checking}</div>
                         <div id="currentIP" style="margin: 8px 0; color: #00ff00; font-family: 'Courier New', monospace; text-shadow: 0 0 3px #00ff00;">${t.currentIP}${t.checking}</div>
+                        <div id="echStatus" style="margin: 8px 0; color: #00ff00; font-family: 'Courier New', monospace; text-shadow: 0 0 3px #00ff00; font-size: 0.9rem;">ECH状态: ${t.checking}</div>
                         <div id="regionMatch" style="margin: 8px 0; color: #00ff00; font-family: 'Courier New', monospace; text-shadow: 0 0 3px #00ff00;">${t.regionMatch}${t.checking}</div>
                         <div id="selectionLogic" style="margin: 8px 0; color: #00aa00; font-family: 'Courier New', monospace; font-size: 0.9rem; text-shadow: 0 0 3px #00aa00;">${t.selectionLogic}${t.selectionLogicText}</div>
                 </div>
@@ -2412,6 +2826,25 @@
                                         <input type="checkbox" id="ex" style="margin-right: 8px; width: 18px; height: 18px; cursor: pointer;">
                                             <span style="font-size: 1.1rem;">${t.enableXhttp}</span>
                                     </label>
+                                </div>
+                                <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(0, 255, 0, 0.3);">
+                                    <div style="margin-bottom: 10px;">
+                                        <label style="display: inline-flex; align-items: center; cursor: pointer; color: #00ff00;">
+                                            <input type="checkbox" id="ech" style="margin-right: 8px; width: 18px; height: 18px; cursor: pointer;">
+                                                <span style="font-size: 1.1rem;">${t.enableECH}</span>
+                                        </label>
+                                        <small style="color: #00aa00; font-size: 0.8rem; display: block; margin-top: 5px; margin-left: 26px;">${t.enableECHHint}</small>
+                                    </div>
+                                    <div style="margin-top: 15px; margin-bottom: 10px;">
+                                        <label style="display: block; margin-bottom: 8px; color: #00ff00; font-size: 0.95rem;">${t.customDNS}</label>
+                                        <input type="text" id="customDNS" placeholder="${t.customDNSPlaceholder}" style="width: 100%; padding: 10px; background: rgba(0, 0, 0, 0.8); border: 1px solid #00ff00; color: #00ff00; font-family: 'Courier New', monospace; font-size: 13px;">
+                                        <small style="color: #00aa00; font-size: 0.8rem; display: block; margin-top: 5px;">${t.customDNSHint}</small>
+                                    </div>
+                                    <div style="margin-bottom: 10px;">
+                                        <label style="display: block; margin-bottom: 8px; color: #00ff00; font-size: 0.95rem;">${t.customECHDomain}</label>
+                                        <input type="text" id="customECHDomain" placeholder="${t.customECHDomainPlaceholder}" style="width: 100%; padding: 10px; background: rgba(0, 0, 0, 0.8); border: 1px solid #00ff00; color: #00ff00; font-family: 'Courier New', monospace; font-size: 13px;">
+                                        <small style="color: #00aa00; font-size: 0.8rem; display: block; margin-top: 5px;">${t.customECHDomainHint}</small>
+                                    </div>
                                 </div>
                                 <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(0, 255, 0, 0.3);">
                                         <label style="display: block; margin-bottom: 8px; color: #00ff00; font-size: 0.95rem;">${t.trojanPassword}</label>
@@ -2825,18 +3258,21 @@
                         });
                     }
                 } else {
-                    var encodedUrl = encodeURIComponent(subscriptionUrl);
-                    finalUrl = SUB_CONVERTER_URL + "?target=" + clientType + "&url=" + encodedUrl + "&insert=false&config=" + encodeURIComponent(REMOTE_CONFIG_URL) + "&emoji=true&list=false&xudp=false&udp=false&tfo=false&expand=true&scv=false&fdn=false&new_name=true";
-                    var urlElement = document.getElementById("clientSubscriptionUrl");
-                    urlElement.textContent = finalUrl;
-                    urlElement.style.display = "block";
-                    urlElement.style.overflowWrap = "break-word";
-                    urlElement.style.wordBreak = "break-all";
-                    urlElement.style.overflowX = "auto";
-                    urlElement.style.maxWidth = "100%";
-                    urlElement.style.boxSizing = "border-box";
+                    // 检查 ECH 是否开启
+                    var echEnabled = document.getElementById('ech') && document.getElementById('ech').checked;
                     
-                    if (clientType === atob('Y2xhc2g=')) {
+                    // 如果 ECH 开启且是 Clash，直接使用后端接口
+                    if (echEnabled && clientType === atob('Y2xhc2g=')) {
+                        finalUrl = subscriptionUrl + "?target=" + clientType;
+                        var urlElement = document.getElementById("clientSubscriptionUrl");
+                        urlElement.textContent = finalUrl;
+                        urlElement.style.display = "block";
+                        urlElement.style.overflowWrap = "break-word";
+                        urlElement.style.wordBreak = "break-all";
+                        urlElement.style.overflowX = "auto";
+                        urlElement.style.maxWidth = "100%";
+                        urlElement.style.boxSizing = "border-box";
+                        
                         if (clientName === 'STASH') {
                             schemeUrl = 'stash://install?url=' + encodeURIComponent(finalUrl);
                             displayName = 'STASH';
@@ -2844,30 +3280,64 @@
                             schemeUrl = 'clash://install-config?url=' + encodeURIComponent(finalUrl);
                             displayName = 'CLASH';
                         }
-                    } else if (clientType === atob('c3VyZ2U=')) {
-                        schemeUrl = 'surge:///install-config?url=' + encodeURIComponent(finalUrl);
-                        displayName = 'SURGE';
-                    } else if (clientType === atob('c2luZ2JveA==')) {
-                        schemeUrl = 'sing-box://install-config?url=' + encodeURIComponent(finalUrl);
-                        displayName = 'SING-BOX';
-                    } else if (clientType === atob('bG9vbg==')) {
-                        schemeUrl = 'loon://install?url=' + encodeURIComponent(finalUrl);
-                        displayName = 'LOON';
-                    } else if (clientType === atob('cXVhbng=')) {
-                        schemeUrl = 'quantumult-x://install-config?url=' + encodeURIComponent(finalUrl);
-                        displayName = 'QUANTUMULT X';
-                    }
-                    
-                    if (schemeUrl) {
-                        tryOpenApp(schemeUrl, function() {
+                        
+                        if (schemeUrl) {
+                            tryOpenApp(schemeUrl, function() {
+                                navigator.clipboard.writeText(finalUrl).then(function() {
+                                        alert(displayName + " " + t.subscriptionCopied);
+                                });
+                            });
+                        } else {
                             navigator.clipboard.writeText(finalUrl).then(function() {
                                     alert(displayName + " " + t.subscriptionCopied);
                             });
-                        });
+                        }
                     } else {
-                        navigator.clipboard.writeText(finalUrl).then(function() {
-                                alert(displayName + " " + t.subscriptionCopied);
-                        });
+                        // 其他情况使用订阅转换服务
+                        var encodedUrl = encodeURIComponent(subscriptionUrl);
+                        finalUrl = SUB_CONVERTER_URL + "?target=" + clientType + "&url=" + encodedUrl + "&insert=false&config=" + encodeURIComponent(REMOTE_CONFIG_URL) + "&emoji=true&list=false&xudp=false&udp=false&tfo=false&expand=true&scv=false&fdn=false&new_name=true";
+                        var urlElement = document.getElementById("clientSubscriptionUrl");
+                        urlElement.textContent = finalUrl;
+                        urlElement.style.display = "block";
+                        urlElement.style.overflowWrap = "break-word";
+                        urlElement.style.wordBreak = "break-all";
+                        urlElement.style.overflowX = "auto";
+                        urlElement.style.maxWidth = "100%";
+                        urlElement.style.boxSizing = "border-box";
+                        
+                        if (clientType === atob('Y2xhc2g=')) {
+                            if (clientName === 'STASH') {
+                                schemeUrl = 'stash://install?url=' + encodeURIComponent(finalUrl);
+                                displayName = 'STASH';
+                            } else {
+                                schemeUrl = 'clash://install-config?url=' + encodeURIComponent(finalUrl);
+                                displayName = 'CLASH';
+                            }
+                        } else if (clientType === atob('c3VyZ2U=')) {
+                            schemeUrl = 'surge:///install-config?url=' + encodeURIComponent(finalUrl);
+                            displayName = 'SURGE';
+                        } else if (clientType === atob('c2luZ2JveA==')) {
+                            schemeUrl = 'sing-box://install-config?url=' + encodeURIComponent(finalUrl);
+                            displayName = 'SING-BOX';
+                        } else if (clientType === atob('bG9vbg==')) {
+                            schemeUrl = 'loon://install?url=' + encodeURIComponent(finalUrl);
+                            displayName = 'LOON';
+                        } else if (clientType === atob('cXVhbng=')) {
+                            schemeUrl = 'quantumult-x://install-config?url=' + encodeURIComponent(finalUrl);
+                            displayName = 'QUANTUMULT X';
+                        }
+                        
+                        if (schemeUrl) {
+                            tryOpenApp(schemeUrl, function() {
+                                navigator.clipboard.writeText(finalUrl).then(function() {
+                                        alert(displayName + " " + t.subscriptionCopied);
+                                });
+                            });
+                        } else {
+                            navigator.clipboard.writeText(finalUrl).then(function() {
+                                    alert(displayName + " " + t.subscriptionCopied);
+                            });
+                        }
                     }
                 }
             }
@@ -3337,7 +3807,14 @@
                     document.getElementById('ev').checked = config.ev !== 'no';
                     document.getElementById('et').checked = config.et === 'yes';
                     document.getElementById('ex').checked = config.ex === 'yes';
+                    document.getElementById('ech').checked = config.ech === 'yes';
                     document.getElementById('tp').value = config.tp || '';
+                    if (document.getElementById('customDNS')) {
+                        document.getElementById('customDNS').value = config.customDNS || '';
+                    }
+                    if (document.getElementById('customECHDomain')) {
+                        document.getElementById('customECHDomain').value = config.customECHDomain || '';
+                    }
                     document.getElementById('scu').value = config.scu || '';
                     document.getElementById('epd').checked = config.epd !== 'no';
                     document.getElementById('epi').checked = config.epi !== 'no';
@@ -3543,10 +4020,59 @@
                 }
             }
             
+            async function checkECHStatus() {
+                const echStatusEl = document.getElementById('echStatus');
+                
+                if (!echStatusEl) return;
+                
+                try {
+                    const currentUrl = window.location.href;
+                    const subscriptionUrl = currentUrl + '/sub';
+                    
+                    echStatusEl.innerHTML = 'ECH状态: <span style="color: #ffaa00;">检测中...</span>';
+                    
+                    const response = await fetch(subscriptionUrl, {
+                        method: 'GET',
+                        headers: {
+                            'Accept': 'text/plain'
+                        }
+                    });
+                    
+                    const echStatusHeader = response.headers.get('X-ECH-Status');
+                    const echConfigLength = response.headers.get('X-ECH-Config-Length');
+                    
+                    if (echStatusHeader === 'ENABLED') {
+                        echStatusEl.innerHTML = 'ECH状态: <span style="color: #44ff44;">✅ 已启用' + (echConfigLength ? ' (配置长度: ' + echConfigLength + ')' : '') + '</span>';
+                    } else {
+                        echStatusEl.innerHTML = 'ECH状态: <span style="color: #ffaa00;">⚠️ 未启用</span>';
+                    }
+                } catch (error) {
+                    echStatusEl.innerHTML = 'ECH状态: <span style="color: #ff4444;">❌ 检测失败: ' + error.message + '</span>';
+                }
+            }
+            
             document.addEventListener('DOMContentLoaded', function() {
                 createMatrixRain();
                 checkSystemStatus();
                 checkKVStatus();
+                checkECHStatus();
+                
+                // ECH 开启时自动联动开启仅TLS
+                const echCheckbox = document.getElementById('ech');
+                const portControl = document.getElementById('portControl');
+                if (echCheckbox && portControl) {
+                    echCheckbox.addEventListener('change', function() {
+                        if (this.checked) {
+                            // ECH 开启时，自动设置仅TLS为 yes
+                            portControl.value = 'yes';
+                        }
+                    });
+                    
+                    // 页面加载时，如果 ECH 已勾选，也自动设置仅TLS
+                    if (echCheckbox.checked) {
+                        portControl.value = 'yes';
+                    }
+                }
                 
                 // 监听customIP输入框变化，实时更新wk地区选择状态
                 const customIPInput = document.getElementById('customIP');
@@ -3574,7 +4100,10 @@
                             ev: document.getElementById('ev').checked ? 'yes' : 'no', 
                             et: document.getElementById('et').checked ? 'yes' : 'no', 
                             ex: document.getElementById('ex').checked ? 'yes' : 'no', 
-                            tp: document.getElementById('tp').value
+                            ech: document.getElementById('ech').checked ? 'yes' : 'no',
+                            tp: document.getElementById('tp').value,
+                            customDNS: document.getElementById('customDNS').value,
+                            customECHDomain: document.getElementById('customECHDomain').value
                         };
                         
                         if (!document.getElementById('ev').checked && 
@@ -3592,13 +4121,15 @@
                 if (otherConfigForm) {
                     otherConfigForm.addEventListener('submit', async function(e) {
                         e.preventDefault();
-                        const configData = { ev: document.getElementById('ev').checked ? 'yes' : 'no', et: document.getElementById('et').checked ? 'yes' : 'no', ex: document.getElementById('ex').checked ? 'yes' : 'no', tp: document.getElementById('tp').value,
+                        const configData = { ev: document.getElementById('ev').checked ? 'yes' : 'no', et: document.getElementById('et').checked ? 'yes' : 'no', ex: document.getElementById('ex').checked ? 'yes' : 'no', ech: document.getElementById('ech').checked ? 'yes' : 'no', tp: document.getElementById('tp').value,
                             d: document.getElementById('customPath').value,
                             p: document.getElementById('customIP').value,
                             yx: document.getElementById('yx').value,
                             yxURL: document.getElementById('yxURL').value,
                             s: document.getElementById('socksConfig').value,
-                            homepage: document.getElementById('customHomepage').value
+                            homepage: document.getElementById('customHomepage').value,
+                            customDNS: document.getElementById('customDNS').value,
+                            customECHDomain: document.getElementById('customECHDomain').value
                         };
                         
                         // 确保至少选择一个协议
@@ -4255,10 +4786,28 @@
                         
                         resultItems.forEach(item => {
                             const colo = item.dataset.colo || '';
+                            const checkbox = item.querySelector('input[type="checkbox"]');
                             if (allChecked || noneChecked || selectedCities.has(colo)) {
                                 item.style.display = 'flex';
+                                // 同步更新结果项复选框的选中状态
+                                if (checkbox) {
+                                    if (allChecked) {
+                                        // 所有城市都选中时，所有结果项复选框都选中
+                                        checkbox.checked = true;
+                                    } else if (noneChecked) {
+                                        // 没有选中任何城市时，所有结果项复选框都取消选中
+                                        checkbox.checked = false;
+                                    } else {
+                                        // 根据城市选择状态同步复选框
+                                        checkbox.checked = selectedCities.has(colo);
+                                    }
+                                }
                             } else {
                                 item.style.display = 'none';
+                                // 取消选中隐藏的结果项复选框
+                                if (checkbox) {
+                                    checkbox.checked = false;
+                                }
                             }
                         });
                         
@@ -5010,7 +5559,7 @@
         }
     }
 
-    function generateLinksFromNewIPs(list, user, workerDomain) {
+    function generateLinksFromNewIPs(list, user, workerDomain, echConfig = null) {
         
         const CF_HTTP_PORTS = [80, 8080, 8880, 2052, 2082, 2086, 2095];
         const CF_HTTPS_PORTS = [443, 2053, 2083, 2087, 2096, 8443];
@@ -5026,7 +5575,16 @@
             if (CF_HTTPS_PORTS.includes(port)) {
                 
                 const wsNodeName = `${nodeName}-${port}-WS-TLS`;
-                const link = `${proto}://${user}@${item.ip}:${port}?encryption=none&security=tls&sni=${workerDomain}&fp=chrome&type=ws&host=${workerDomain}&path=${wsPath}#${encodeURIComponent(wsNodeName)}`;
+                let link = `${proto}://${user}@${item.ip}:${port}?encryption=none&security=tls&sni=${workerDomain}&fp=${enableECH ? 'chrome' : 'randomized'}&type=ws&host=${workerDomain}&path=${wsPath}`;
+                
+                // 如果启用了ECH，添加ech参数（ECH需要伪装成Chrome浏览器）
+                if (enableECH) {
+                    const dnsServer = customDNS || 'https://dns.joeyblog.eu.org/joeyblog';
+                    const echDomain = customECHDomain || 'cloudflare-ech.com';
+                    link += `&alpn=h3%2Ch2%2Chttp%2F1.1&ech=${encodeURIComponent(`${echDomain}+${dnsServer}`)}`;
+                }
+                
+                link += `#${encodeURIComponent(wsNodeName)}`;
                 links.push(link);
             } else if (CF_HTTP_PORTS.includes(port)) {
                 
@@ -5038,14 +5596,23 @@
             } else {
                 
                 const wsNodeName = `${nodeName}-${port}-WS-TLS`;
-                const link = `${proto}://${user}@${item.ip}:${port}?encryption=none&security=tls&sni=${workerDomain}&fp=chrome&type=ws&host=${workerDomain}&path=${wsPath}#${encodeURIComponent(wsNodeName)}`;
+                let link = `${proto}://${user}@${item.ip}:${port}?encryption=none&security=tls&sni=${workerDomain}&fp=${enableECH ? 'chrome' : 'randomized'}&type=ws&host=${workerDomain}&path=${wsPath}`;
+                
+                // 如果启用了ECH，添加ech参数（ECH需要伪装成Chrome浏览器）
+                if (enableECH) {
+                    const dnsServer = customDNS || 'https://dns.joeyblog.eu.org/joeyblog';
+                    const echDomain = customECHDomain || 'cloudflare-ech.com';
+                    link += `&alpn=h3%2Ch2%2Chttp%2F1.1&ech=${encodeURIComponent(`${echDomain}+${dnsServer}`)}`;
+                }
+                
+                link += `#${encodeURIComponent(wsNodeName)}`;
                 links.push(link);
             }
         });
         return links;
     }
 
-    function generateXhttpLinksFromSource(list, user, workerDomain) {
+    function generateXhttpLinksFromSource(list, user, workerDomain, echConfig = null) {
         const links = [];
         const nodePath = user.substring(0, 8);
         
@@ -5063,12 +5630,19 @@
                 security: 'tls',
                 sni: workerDomain,
                 fp: 'chrome',
-                allowInsecure: '1',
                 type: 'xhttp',
                 host: workerDomain,
                 path: `/${nodePath}`,
                 mode: 'stream-one'
             });
+            
+            // 如果启用了ECH，添加ech参数（ECH需要伪装成Chrome浏览器）
+            if (enableECH) {
+                const dnsServer = customDNS || 'https://dns.joeyblog.eu.org/joeyblog';
+                const echDomain = customECHDomain || 'cloudflare-ech.com';
+                params.set('alpn', 'h3,h2,http/1.1');
+                params.set('ech', `${echDomain}+${dnsServer}`);
+            }
             
             links.push(`vless://${user}@${safeIP}:${port}?${params.toString()}#${encodeURIComponent(wsNodeName)}`);
         });
@@ -5076,7 +5650,7 @@
         return links;
     }
 
-    async function generateTrojanLinksFromNewIPs(list, user, workerDomain) {
+    async function generateTrojanLinksFromNewIPs(list, user, workerDomain, echConfig = null) {
         
         const CF_HTTP_PORTS = [80, 8080, 8880, 2052, 2082, 2086, 2095];
         const CF_HTTPS_PORTS = [443, 2053, 2083, 2087, 2096, 8443];
@@ -5093,7 +5667,16 @@
             if (CF_HTTPS_PORTS.includes(port)) {
                 
                 const wsNodeName = `${nodeName}-${port}-${atob('VHJvamFu')}-WS-TLS`;
-                const link = `${atob('dHJvamFuOi8v')}${password}@${item.ip}:${port}?security=tls&sni=${workerDomain}&fp=chrome&type=ws&host=${workerDomain}&path=${wsPath}#${encodeURIComponent(wsNodeName)}`;
+                let link = `${atob('dHJvamFuOi8v')}${password}@${item.ip}:${port}?security=tls&sni=${workerDomain}&fp=chrome&type=ws&host=${workerDomain}&path=${wsPath}`;
+                
+                // 如果启用了ECH，添加ech参数（ECH需要伪装成Chrome浏览器）
+                if (enableECH) {
+                    const dnsServer = customDNS || 'https://dns.joeyblog.eu.org/joeyblog';
+                    const echDomain = customECHDomain || 'cloudflare-ech.com';
+                    link += `&alpn=h3%2Ch2%2Chttp%2F1.1&ech=${encodeURIComponent(`${echDomain}+${dnsServer}`)}`;
+                }
+                
+                link += `#${encodeURIComponent(wsNodeName)}`;
                 links.push(link);
             } else if (CF_HTTP_PORTS.includes(port)) {
                 
@@ -5105,7 +5688,16 @@
             } else {
                 
                 const wsNodeName = `${nodeName}-${port}-${atob('VHJvamFu')}-WS-TLS`;
-                const link = `${atob('dHJvamFuOi8v')}${password}@${item.ip}:${port}?security=tls&sni=${workerDomain}&fp=chrome&type=ws&host=${workerDomain}&path=${wsPath}#${encodeURIComponent(wsNodeName)}`;
+                let link = `${atob('dHJvamFuOi8v')}${password}@${item.ip}:${port}?security=tls&sni=${workerDomain}&fp=chrome&type=ws&host=${workerDomain}&path=${wsPath}`;
+                
+                // 如果启用了ECH，添加ech参数（ECH需要伪装成Chrome浏览器）
+                if (enableECH) {
+                    const dnsServer = customDNS || 'https://dns.joeyblog.eu.org/joeyblog';
+                    const echDomain = customECHDomain || 'cloudflare-ech.com';
+                    link += `&alpn=h3%2Ch2%2Chttp%2F1.1&ech=${encodeURIComponent(`${echDomain}+${dnsServer}`)}`;
+                }
+                
+                link += `#${encodeURIComponent(wsNodeName)}`;
                 links.push(link);
             }
         });
@@ -5499,6 +6091,38 @@
         const githubIPsControl = getConfigValue('egi', '');
         if (githubIPsControl !== undefined && githubIPsControl !== '') {
             egi = githubIPsControl !== 'no' && githubIPsControl !== false && githubIPsControl !== 'false';
+        }
+        
+        const echControl = getConfigValue('ech', '');
+        if (echControl !== undefined && echControl !== '') {
+            enableECH = echControl === 'yes' || echControl === true || echControl === 'true';
+        }
+        
+        // 更新自定义DNS和ECH域名
+        const customDNSValue = getConfigValue('customDNS', '');
+        if (customDNSValue && customDNSValue.trim()) {
+            customDNS = customDNSValue.trim();
+        } else {
+            customDNS = 'https://dns.joeyblog.eu.org/joeyblog';
+        }
+        
+        const customECHDomainValue = getConfigValue('customECHDomain', '');
+        if (customECHDomainValue && customECHDomainValue.trim()) {
+            customECHDomain = customECHDomainValue.trim();
+        } else {
+            customECHDomain = 'cloudflare-ech.com';
+        }
+        
+        // 如果启用了ECH，自动启用仅TLS模式（避免80端口干扰）
+        // ECH需要TLS才能工作，所以必须禁用非TLS节点
+        if (enableECH) {
+            disableNonTLS = true;
+        }
+        
+        // 检查dkby配置（如果手动设置了dkby=yes，也会启用仅TLS）
+        const dkbyControl = getConfigValue('dkby', '');
+        if (dkbyControl && dkbyControl.toLowerCase() === 'yes') {
+            disableNonTLS = true;
         }
         
         cp = getConfigValue('d', '') || '';
